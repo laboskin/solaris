@@ -1,7 +1,8 @@
 [![build](https://github.com/solarisdb/solaris/actions/workflows/build.yaml/badge.svg)](https://github.com/solarisdb/solaris/actions/workflows/build.yaml) [![docker](https://github.com/solarisdb/solaris/actions/workflows/docker.yaml/badge.svg)](https://github.com/solarisdb/solaris/actions/workflows/docker.yaml) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/solarisdb/solaris/blob/main/LICENSE)
 
 # Solaris DB
-Solaris is a streaming database that facilitates the storage and retrieval of unstructured data records within streams, which are groups of ordered records. As a horizontally scalable cloud database, Solaris supports billions of streams storing petabytes of data, and enables efficient, low-latency operations.
+Solaris is a streaming database. It is simple and provides basic operations to work with streams of unstructured data records. Solaris excels in handling large amounts of data and operates at high speed. Born with horizontal scalability and simplicity in mind, Solaris offers the ability to work with billions of streams, petabytes of data, and gigabytes of throughput per second.
+
 
 __Highlights__
 * _Scalable storage capacity_. Solaris supports billions of streams with petabytes of data records that can be persisted in long-term cloud-storages as AWS S3.
