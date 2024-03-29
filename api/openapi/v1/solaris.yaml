@@ -26,7 +26,7 @@ paths:
       description: Query logs.
       operationId: QueryLogs
       parameters:
-        - $ref: '#/components/parameters/FilterCondition'
+        - $ref: '#/components/parameters/LogsCondFilter'
         - $ref: '#/components/parameters/FromPageId'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -93,16 +93,17 @@ paths:
           description: The log was not found.
 
   /records:
-    post:
+    get:
       summary: Query records
       description: Query records.
       operationId: QueryRecords
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/QueryRecordsRequest'
+      parameters:
+        - $ref: '#/components/parameters/LogsCondFilter'
+        - $ref: '#/components/parameters/RecordsCondFilter'
+        - $ref: '#/components/parameters/LogIds'
+        - $ref: '#/components/parameters/Desc'
+        - $ref: '#/components/parameters/FromPageId'
+        - $ref: '#/components/parameters/Limit'
       responses:
         200:
           description: The query was successful.
@@ -253,31 +254,6 @@ components:
           items:
             $ref: '#/components/schemas/CreateRecordRequest'
 
-    QueryRecordsRequest:
-      type: object
-      description: The request object to query records.
-      properties:
-        logsFilterCondition:
-          type: string
-          description: The logs filter condition.
-        recsFilterCondition:
-          type: string
-          description: The records filter condition.
-        logIds:
-          type: array
-          description: The log ids filter. If specified, the logsFilterCondition is ignored.
-          items:
-            type: string
-        desc:
-          type: boolean
-          description: If true, the result returns records with ids equal to or less than fromPageId.
-        fromPageId:
-          type: string
-          description: The fromPageId specifies from which page to start returning the results.
-        limit:
-          type: integer
-          description: The maximum number of records per page.
-
     QueryRecordsResult:
       type: object
       description: The response object to the query records request.
@@ -312,13 +288,36 @@ components:
     #
     # Query params
     #
-    FilterCondition:
+    LogsCondFilter:
       in: query
-      name: filterCondition
-      description: The filter condition.
+      name: logsCondFilter
+      description: The condition for filtering the logs.
       required: false
       schema:
         type: string
+    RecordsCondFilter:
+      in: query
+      name: recordsCondFilter
+      description: The condition for filtering the records.
+      required: false
+      schema:
+        type: string
+    LogIds:
+      in: query
+      name: logIds
+      description: The ids of the logs to consider. If specified, the `logsCondFilter` is ignored.
+      required: false
+      schema:
+        type: array
+        items:
+          type: string
+    Desc:
+      in: query
+      name: desc
+      description: The flag specifies the descending order for pagination.
+      required: false
+      schema:
+        type: boolean
     Limit:
       in: query
       name: limit

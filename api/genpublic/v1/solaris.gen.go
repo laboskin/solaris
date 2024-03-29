@@ -73,27 +73,6 @@ type QueryLogsResult struct {
 	Total int `json:"total"`
 }
 
-// QueryRecordsRequest The request object to query records.
-type QueryRecordsRequest struct {
-	// Desc If true, the result returns records with ids equal to or less than fromPageId.
-	Desc *bool `json:"desc,omitempty"`
-
-	// FromPageId The fromPageId specifies from which page to start returning the results.
-	FromPageId *string `json:"fromPageId,omitempty"`
-
-	// Limit The maximum number of records per page.
-	Limit *int `json:"limit,omitempty"`
-
-	// LogIds The log ids filter. If specified, the logsFilterCondition is ignored.
-	LogIds *[]string `json:"logIds,omitempty"`
-
-	// LogsFilterCondition The logs filter condition.
-	LogsFilterCondition *string `json:"logsFilterCondition,omitempty"`
-
-	// RecsFilterCondition The records filter condition.
-	RecsFilterCondition *string `json:"recsFilterCondition,omitempty"`
-}
-
 // QueryRecordsResult The response object to the query records request.
 type QueryRecordsResult struct {
 	// Items The list of found records.
@@ -130,8 +109,8 @@ type UpdateLogRequest struct {
 	Tags Tags `json:"tags"`
 }
 
-// FilterCondition defines model for FilterCondition.
-type FilterCondition = string
+// Desc defines model for Desc.
+type Desc = bool
 
 // FromPageId defines model for FromPageId.
 type FromPageId = string
@@ -142,10 +121,40 @@ type Limit = int
 // LogId defines model for LogId.
 type LogId = string
 
+// LogIds defines model for LogIds.
+type LogIds = []string
+
+// LogsCondFilter defines model for LogsCondFilter.
+type LogsCondFilter = string
+
+// RecordsCondFilter defines model for RecordsCondFilter.
+type RecordsCondFilter = string
+
 // QueryLogsParams defines parameters for QueryLogs.
 type QueryLogsParams struct {
-	// FilterCondition The filter condition.
-	FilterCondition *FilterCondition `form:"filterCondition,omitempty" json:"filterCondition,omitempty"`
+	// LogsCondFilter The condition for filtering the logs.
+	LogsCondFilter *LogsCondFilter `form:"logsCondFilter,omitempty" json:"logsCondFilter,omitempty"`
+
+	// FromPageId The id of the page to start returning the results from.
+	FromPageId *FromPageId `form:"fromPageId,omitempty" json:"fromPageId,omitempty"`
+
+	// Limit The max number of objects to return per page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// QueryRecordsParams defines parameters for QueryRecords.
+type QueryRecordsParams struct {
+	// LogsCondFilter The condition for filtering the logs.
+	LogsCondFilter *LogsCondFilter `form:"logsCondFilter,omitempty" json:"logsCondFilter,omitempty"`
+
+	// RecordsCondFilter The condition for filtering the records.
+	RecordsCondFilter *RecordsCondFilter `form:"recordsCondFilter,omitempty" json:"recordsCondFilter,omitempty"`
+
+	// LogIds The ids of the logs to consider. If specified, the `logsCondFilter` is ignored.
+	LogIds *LogIds `form:"logIds,omitempty" json:"logIds,omitempty"`
+
+	// Desc The flag specifies the descending order for pagination.
+	Desc *Desc `form:"desc,omitempty" json:"desc,omitempty"`
 
 	// FromPageId The id of the page to start returning the results from.
 	FromPageId *FromPageId `form:"fromPageId,omitempty" json:"fromPageId,omitempty"`
@@ -165,9 +174,6 @@ type UpdateLogJSONRequestBody = UpdateLogRequest
 
 // CreateRecordsJSONRequestBody defines body for CreateRecords for application/json ContentType.
 type CreateRecordsJSONRequestBody = CreateRecordsRequest
-
-// QueryRecordsJSONRequestBody defines body for QueryRecords for application/json ContentType.
-type QueryRecordsJSONRequestBody = QueryRecordsRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -190,8 +196,8 @@ type ServerInterface interface {
 	// (GET /ping)
 	Ping(c *gin.Context)
 	// Query records
-	// (POST /records)
-	QueryRecords(c *gin.Context)
+	// (GET /records)
+	QueryRecords(c *gin.Context, params QueryRecordsParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -221,11 +227,11 @@ func (siw *ServerInterfaceWrapper) QueryLogs(c *gin.Context) {
 	// Parameter object where we will unmarshal all parameters from the context
 	var params QueryLogsParams
 
-	// ------------- Optional query parameter "filterCondition" -------------
+	// ------------- Optional query parameter "logsCondFilter" -------------
 
-	err = runtime.BindQueryParameter("form", true, false, "filterCondition", c.Request.URL.Query(), &params.FilterCondition)
+	err = runtime.BindQueryParameter("form", true, false, "logsCondFilter", c.Request.URL.Query(), &params.LogsCondFilter)
 	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter filterCondition: %s", err), http.StatusBadRequest)
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter logsCondFilter: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -317,11 +323,64 @@ func (siw *ServerInterfaceWrapper) Ping(c *gin.Context) {
 // QueryRecords operation middleware
 func (siw *ServerInterfaceWrapper) QueryRecords(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params QueryRecordsParams
+
+	// ------------- Optional query parameter "logsCondFilter" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "logsCondFilter", c.Request.URL.Query(), &params.LogsCondFilter)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter logsCondFilter: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "recordsCondFilter" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "recordsCondFilter", c.Request.URL.Query(), &params.RecordsCondFilter)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter recordsCondFilter: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "logIds" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "logIds", c.Request.URL.Query(), &params.LogIds)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter logIds: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "desc" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "desc", c.Request.URL.Query(), &params.Desc)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter desc: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "fromPageId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "fromPageId", c.Request.URL.Query(), &params.FromPageId)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter fromPageId: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", c.Request.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %s", err), http.StatusBadRequest)
+		return
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
 
-	siw.Handler.QueryRecords(c)
+	siw.Handler.QueryRecords(c, params)
 }
 
 // GinServerOptions provides options for the Gin server.
@@ -365,7 +424,7 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.GET(options.BaseURL+"/ping", wrapper.Ping)
 
-	router.POST(options.BaseURL+"/records", wrapper.QueryRecords)
+	router.GET(options.BaseURL+"/records", wrapper.QueryRecords)
 
 	return router
 }
@@ -373,29 +432,29 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/8xYzY7bNhB+FYLtoQVU22ly8i3ZIOgCOWzS5BTkwJVGElOJ1JJUHGOhdy+G1D8pW+vd",
-	"LHIyLJLD+fnmmxne01iWlRQgjKb7e1oxxUowoOy/d7wwoK6kSLjhUuCnBHSseOX+0k85kNRuInG3a0Mj",
-	"ynHxrgZ1pBEVrAS6p+lMWER1nEPJUKo5VrhFG8VFRpsmou+ULG9YBtdJ+FaeEJkSkwOpWAbESKINU4Yo",
-	"MLUSXGR2TYGuC6NJqmS5qNdw02mV3vOSm7A2JftBRF3egkKt5O03iI1GpZw6pAJl9VzSobCiA9dzYSAD",
-	"5e6X2ZI3CpkRnoAwPOWg+lsqZvLRJfZ8RBXc1VxBQvdG1XDK5qZbtGi4UsAMvJfZR7irQS+4QrnF1gno",
-	"g9ieQx1RsUrJCpThYGUaltnf3xWkdE9/2w5w3LZXbz/hHtRlUPyLO/g16lR2t9EmarX8CLFUyWWKMqLs",
-	"aV/bih0LyZIleXiItHvwcCpVyQzd09ujARoFIDW2qBN+zih9mVVOPe0b1S4sAIujrLQ7jfJuoRVpbeQG",
-	"yrMRDMWk6c1kSrGj545OrZA73kIBFokP9UViDyIUA45IL2W703Gdiw0Z9F5my4nttvn6tlF4vWC94SVo",
-	"w8qKHHIQlg5R2oHpcfx6jCbMwF94xjcoonw173hHT8Jr4MwOYLzXdCStZ8HoAYQR0bpKLnRQe5L8IeDQ",
-	"q8aSBBIiFUEdCFNAWFUVHJI/1zpyhgyObGwNGtwUjcI6tiCEmg9YRFwWYJlbSgJdSaFhlAVoqS1ANhG6",
-	"NPEB1uf2Mi+kshZJn0+ryACx7iV/RAX8MOsKPu7sq6mHNyMNKxYCjksjzE2VD1TcSbCsbZ38xXBcxtEu",
-	"GosUjSJ8UdcpsQV81Om0/YbuMXvgJic80QTualbgVVKRArQmJmeCDL3PyAO3UhbABJqUnunChnWiK4iR",
-	"BVyzRQ45j/M1vVkwiMXJVouXdRmgjnGT5ROH7X70KRrTLblvyHXam5NEHTHoWTdMuCY8E1LNCqGPyBnS",
-	"A7IW1dJrCo5lj3UiO1+tK2NnIH4h6XQ6PJ53Rgmzinqc5r8U+4xMeDQBtead6k6frpdoBT5pO9HKPNNR",
-	"FA+Zg7zTP7WHtxW9m7O6m8YlPRS2T21LwxKXi6y4mc5IcxPCdmMjMbJ4kP/ZNhEPn9tc8/E8cxtu4yKV",
-	"VjY3Ba79KwumuH77hry+uaYR/Q5KO31fbHabHZomKxCs4nRPX252m5fW6Sa3mm2RPZ2p2PP7Rr+dzgJo",
-	"HcMlxNZowmgHZtDmjUyONlekMCCsG20DGNtj22/ake4wTp9yjj/CNFNXYWm3HxyTWlP+3r06USlKZuK8",
-	"q65zgicHUNDOP8nGhkXXZcnUceoK9GoGAYx86BtG31t9I2oDMLwgfQn7YNiynRetJjp/ZOhJVux2jzbN",
-	"V8+TuycL5bwNt4H0Y+SKH/KlruMYtE7rYh6IwcmWqmQoWa8mzynTQPRPND8Jtd4T0CrQvniy++3s0CxS",
-	"4KQYTT07eM0uWHbY3luqbuzTTh1w9ecJA05d3bPqgzHv3vEcJJ8+RB7brwrR7jlD1E61G8T4qxOUZjcL",
-	"aVyrNI/oEBw/otvRq8PJLBq1X6FM+thP5b9SiIOvgeszcXkqsDViSKDHRGfqXxehCvuX/X24vlzlEP9H",
-	"uGuyNajvoHDCqivCsE2uBQ6OfpxuUOYj4Rx49vYtRuXPsPc/wAqTkxgtcRafheGH+eAfKKwDCH8GmEKv",
-	"Fs9MGYGp8tE1dABe0/wfAAD//0Lk7CDlGgAA",
+	"H4sIAAAAAAAC/9RZT2/buBP9KgR/v8MuoLXdbU++tQmKLZBDmk1PRYAy4khmVyIVkmpqBP7uiyH1h7Io",
+	"W4mToHsKLJHDN/Nm3gyVB5qqslISpDV0/UArplkJFrT7dQ4mxb8cTKpFZYWSdE2vN0CyguXEVJCKTIAh",
+	"dgMEF4HkQuZEaQ6aZEqTiuVCMty4oAkVuP2uBr2lCZWsBLp2tmlCTbqBkuFhdlvh81ulCmCS7nYJ/ahV",
+	"ecly+MTjaAQnKnMgKpYDsYoYy7QlGmytJSLCdxpMXVhDMq3KKTRZf1IEk7FayNxBuhClsHE0JftJZF3e",
+	"gkZU6vY7pNYgKA+HVODiAlMYCmc6cryQFnLQ/nyVT0WjUDkRHKRFbnR3SsXsJjjE7U+ohrtaaOB0bXUN",
+	"R3zGPWaKAtNyUKjcuZsqaQQHvSCfsi5XeOLWfMNFZ0ryj6KwoL8RYYjIpdLAJ8PiTw8hCguliWBN2gdM",
+	"a7ZtsQfnxX1IleQCf7vUzdzKNnkQ7wFkoe3DQbyCVGl+EhbtTUzB0aMTDiHatS9dIM80MAsXKr+CuxrM",
+	"RIZr/7LJbce124dRQlSVVhVoK8CTw3L39/8aMrqm/1v2krNsjl5e4xrE0ufjV7/xpiPTn4bsepQ+kk8D",
+	"ypogjtFWbFsoxqfs4SbSrMHNmdIls6hXWws0iRAeetQaP+aUeZpXQWIMnWpeTOiFQFtZuxvt3UJj0ldj",
+	"W2aHGIxxEivEMBwtrFg4zqEAl4mPjQV3G7uCHQbCF9JZW1wTzc0t6ktwcZTXfbMxhy5UPq3XftkYb8PC",
+	"+wnvrSjBWFZW5H4DshUqcs9MyF+Xo5xZ+AP3jB1KqJjdTkZbD6ZX3wrbBBMd0sBa19ySRwhGQuuKPzFA",
+	"zU7ym4T7DhrjHDhRmiAGwjQQVlWFAP773EDuZYbAJusc6sOUBLSGHsSy5jNqu68CnF6misBUShoIqgA9",
+	"dX3Bt+OmTMYJ1tX2tC5kqpa8b4BzxABzfVT8CZXw086b43BlNySNu7uyrJggHF8FOTcEHxmkBmQ531r7",
+	"k3R0Gv1ERtpkO52UcBKYw4tH/ktRE7hwMjuNe4da9/MJbWPwWbW2sXlEbovHzP6j3S864Di5a+8W7Umh",
+	"3sVou270nnHfPllxORwg912I+40qG3jc2//iFPbxQ61X5tcZanGZkJlytoUt8N3fqmBamPMP5P3lJ5rQ",
+	"H6CNx/tmsVqs0DVVgWSVoGv6drFavHVBtxuHbImi513FgWjs9PlwUELv3E0dcysYv5pLIhj7QfGtqxUl",
+	"LUgXRtcdU7dt+d34gaq/axwKzni+2w1DhfdR98ArqXPlz9W7ybw3pGQ23bSXpP0hjtyDhmY45AtHi6nL",
+	"kuntMBQY1RwiOfK566bjaHVd2hHQf0L5Go9Bv2S5dy/dJUd3BB9DZqz23yl2N6NArp6Nyf0RxfE4psj3",
+	"PpRLU6cpGJPVxT4PfYydUqlYrZ4NrppDHrrr6wsl7eh6PCtn3zzb+W6u2k0q4KAXDSPbR829cOKwfHBK",
+	"vXPX3joS6i8DARyGuhPVp6Q85u7Ny1A0EvtZFK1ek6Jm4l9gjr87oGhusVTWT0r7jPbkjBldBjeyg1UU",
+	"TF+xSrrqbiy/EsXRLyXzK3Fq6jG+RfQFdAo7w/h6hiocX9YP8fZytoH0HyL8jG1A/wBNBOYKYTgl11IK",
+	"GSnDS7R5YjpHPgmOPUbwR9T7L2CF3ZAUPfEeB2l4oKdOJmF423qFzjr+NDunwfrP0jNWuv+m/Gcb/PDS",
+	"e3KP7wtjt/s3AAD//y33hbmFGgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
