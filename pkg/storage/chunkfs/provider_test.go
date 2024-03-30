@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"github.com/solarisdb/solaris/golibs/container/lru"
 	"github.com/solarisdb/solaris/golibs/errors"
+	"github.com/solarisdb/solaris/golibs/sss/inmem"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"sync"
@@ -42,6 +43,11 @@ func TestProvider_lifeCycle(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	p := NewProvider(dir, 1, GetDefaultConfig())
+	p.Replicator = NewReplicator(p.GetFileNameByID)
+	p.Replicator.Storage = inmem.NewStorage()
+	p.CA = NewChunkAccessor()
+	p.Replicator.CA = p.CA
+
 	_, err = p.GetOpenedChunk(context2.Background(), "lala", false)
 	assert.NotNil(t, err)
 	rc, err := p.GetOpenedChunk(context2.Background(), "lala", true)
@@ -85,6 +91,10 @@ func TestProvider_contextClosed(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	p := NewProvider(dir, 1, GetDefaultConfig())
+	p.Replicator = NewReplicator(p.GetFileNameByID)
+	p.Replicator.Storage = inmem.NewStorage()
+	p.CA = NewChunkAccessor()
+	p.Replicator.CA = p.CA
 	defer p.Close()
 
 	c, err := p.GetOpenedChunk(context2.Background(), "lala", true)

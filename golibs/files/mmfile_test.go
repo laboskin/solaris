@@ -87,6 +87,8 @@ func TestGrowMMFile(t *testing.T) {
 
 	buf := []byte{1, 2, 3, 4, 5}
 	res, err := mmf.Buffer(4093, len(buf))
+	fi, err := os.Stat(fn)
+	assert.Nil(t, err)
 	n := copy(res, buf)
 	assert.Nil(t, err)
 	assert.Equal(t, n, len(buf))
@@ -102,9 +104,48 @@ func TestGrowMMFile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, int64(20*4096), mmf.Size())
 
+	// after the growth the mod time should be changed
+	fi1, err := os.Stat(fn)
+	assert.Nil(t, err)
+	assert.True(t, fi1.ModTime().After(fi.ModTime()))
+
 	res, err = mmf.Buffer(4093, len(buf))
 	assert.Nil(t, err)
 	assert.Equal(t, buf, res)
+}
+
+func TestSyncMMFile(t *testing.T) {
+	dir, err := os.MkdirTemp("", "TestSyncMMFile")
+	assert.Nil(t, err)
+	defer os.RemoveAll(dir) // clean up
+
+	fsz := int64(2 * 4096)
+	fn := path.Join(dir, "testFile")
+	assert.Nil(t, EnsureFileExists(fn))
+	mmf, err := NewMMFile(fn, fsz)
+	assert.Nil(t, err)
+	defer mmf.Close()
+
+	fi, err := os.Stat(fn)
+	assert.Nil(t, err)
+
+	fi1, err := os.Stat(fn)
+	assert.Nil(t, err)
+	assert.Equal(t, fi1.ModTime(), fi.ModTime())
+
+	mmf.Flush()
+	fi1, err = os.Stat(fn)
+	assert.Nil(t, err)
+	assert.Equal(t, fi1.ModTime(), fi.ModTime())
+
+	buf := []byte{1, 2, 3, 4, 5}
+	res, err := mmf.Buffer(0, len(buf))
+	copy(res, buf)
+
+	mmf.Flush()
+	fi1, err = os.Stat(fn)
+	assert.Nil(t, err)
+	assert.True(t, fi1.ModTime().After(fi.ModTime()))
 }
 
 func TestParallelMMFile(t *testing.T) {

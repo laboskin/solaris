@@ -18,7 +18,6 @@ import (
 	"context"
 	"github.com/solarisdb/solaris/golibs/cast"
 	"github.com/solarisdb/solaris/golibs/errors"
-	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/sss/inmem"
 	"github.com/solarisdb/solaris/golibs/strutil"
 	"github.com/stretchr/testify/assert"
@@ -32,9 +31,11 @@ func TestReplicator_SimpleUploadDownload(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	r := &Replicator{cc: newChunkAccessor(), storage: inmem.NewStorage(), logger: logging.NewLogger("testReplicator"), fileNameByID: func(v string) string {
+	r := NewReplicator(func(v string) string {
 		return filepath.Join(dir, v)
-	}}
+	})
+	r.Storage = inmem.NewStorage()
+	r.CA = NewChunkAccessor()
 
 	cID := "1234"
 	fn := r.fileNameByID(cID)
@@ -43,9 +44,9 @@ func TestReplicator_SimpleUploadDownload(t *testing.T) {
 	os.Remove(r.fileNameByID(cID))
 
 	// check the chunk accessor
-	r.cc.setDeleting(cID)
+	r.CA.setDeleting(cID)
 	assert.NotNil(t, r.DownloadChunk(context.Background(), cID, 0))
-	r.cc.setIdle(cID)
+	r.CA.SetIdle(cID)
 
 	// will check that the file will be downloaded if it doesn't exist
 	assert.Nil(t, r.DownloadChunk(context.Background(), cID, 0))
@@ -76,9 +77,11 @@ func TestReplicator_SimpleDelete(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	r := &Replicator{cc: newChunkAccessor(), storage: inmem.NewStorage(), logger: logging.NewLogger("testReplicator"), fileNameByID: func(v string) string {
+	r := NewReplicator(func(v string) string {
 		return filepath.Join(dir, v)
-	}}
+	})
+	r.Storage = inmem.NewStorage()
+	r.CA = NewChunkAccessor()
 
 	cID := "1234"
 	fn := r.fileNameByID(cID)
@@ -86,9 +89,9 @@ func TestReplicator_SimpleDelete(t *testing.T) {
 	assert.Nil(t, r.UploadChunk(context.Background(), cID))
 
 	// check the chunk accessory
-	r.cc.openChunk(context.Background(), cID)
+	r.CA.openChunk(context.Background(), cID)
 	assert.NotNil(t, r.DeleteChunk(context.Background(), cID, 0))
-	assert.Nil(t, r.cc.closeChunk(cID))
+	assert.Nil(t, r.CA.closeChunk(cID))
 
 	// not both flags
 	assert.NotNil(t, r.DeleteChunk(context.Background(), cID, RFRemoteDelete|RFRemoteSync))
