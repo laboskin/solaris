@@ -147,7 +147,7 @@ func (s *Scanner) watcherWithF(ctx context.Context, f func(ctx context.Context, 
 		if diff < s.cfg.GlobalSyncTimeout {
 			select {
 			case <-ctx.Done():
-				// game over. Everything seemst to be stopped
+				// game over. Everything seems to be stopped
 				return
 			case <-time.After(s.cfg.GlobalSyncTimeout - diff):
 				// ok, no leaks here, because it is the main case for the flow
