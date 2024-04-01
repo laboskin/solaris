@@ -127,13 +127,7 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 			ci = ChunkInfo{ID: ulidutils.NewID()}
 			l.logger.Infof("creating new chunk id=%s for the logID=%s", ci.ID, lid)
 		}
-		rc, err := l.ChnkProvider.GetOpenedChunk(ctx, ci.ID, ci.RecordsCount == 0)
-		if err != nil {
-			gerr = err
-			break
-		}
-		arr, err := rc.Value().AppendRecords(recs)
-		l.ChnkProvider.ReleaseChunk(&rc) // release the chunk ASAP
+		arr, err := l.appendRecords(ctx, ci.ID, ci.RecordsCount == 0, recs)
 		if err != nil {
 			gerr = err
 			break
@@ -155,6 +149,10 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 		ci.RecordsCount = 0
 	}
 
+	if ci.RecordsCount == 0 {
+		l.ChnkProvider.DeleteFileIfEmpty(ci.ID)
+	}
+
 	if added > 0 {
 		// use context.Background instead of ctx to avoid some unrecoverable error in case of the ctx is closed, but we have some
 		// data written
@@ -170,6 +168,22 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 	}
 
 	return &solaris.AppendRecordsResult{Added: int64(added)}, gerr
+}
+
+func (l *localLog) appendRecords(ctx context.Context, cID string, newFile bool, recs []*solaris.Record) (chunkfs.AppendRecordsResult, error) {
+	rc, err := l.ChnkProvider.GetOpenedChunk(ctx, cID, newFile)
+	if err != nil {
+		return chunkfs.AppendRecordsResult{}, err
+	}
+	defer l.ChnkProvider.ReleaseChunk(&rc)
+
+	// request write access to the chunk
+	if err := l.ChnkProvider.CA.SetWriting(ctx, cID); err != nil {
+		return chunkfs.AppendRecordsResult{}, err
+	}
+	defer l.ChnkProvider.CA.SetIdle(cID)
+
+	return rc.Value().AppendRecords(recs)
 }
 
 // QueryRecords allows to retrieve records from the Log by its ID. The function will control the limit of the result. If

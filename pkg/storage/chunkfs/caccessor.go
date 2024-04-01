@@ -17,15 +17,16 @@ package chunkfs
 import (
 	"context"
 	"fmt"
+	"github.com/logrange/linker"
 	"github.com/solarisdb/solaris/golibs/errors"
 	"sync"
 )
 
 type (
-	// chunkAccessor implements a FSM for sharing access to the local chunk files. It keeps the states for every chunk file, and
+	// ChunkAccessor implements FSM for sharing access to the local chunk files. It keeps the states for every chunk file, and
 	// it serves as a synchronization barrier between Chunk and Replicator objects, that may touch the chunk
 	// files in parallel.
-	chunkAccessor struct {
+	ChunkAccessor struct {
 		lock   sync.Mutex
 		chunks map[string]*caRec
 		closed bool
@@ -46,22 +47,25 @@ const (
 	cStateDeleting = 3
 )
 
-func newChunkAccessor() *chunkAccessor {
-	return &chunkAccessor{chunks: make(map[string]*caRec), doneCh: make(chan struct{})}
+// NewChunkAccessor creates the new ChunkAccessor
+func NewChunkAccessor() *ChunkAccessor {
+	return &ChunkAccessor{chunks: make(map[string]*caRec), doneCh: make(chan struct{})}
 }
 
-func (cc *chunkAccessor) Close() error {
+var _ linker.Shutdowner = (*ChunkAccessor)(nil)
+
+// Shutdown - closes the ChunkAccessor
+func (cc *ChunkAccessor) Shutdown() {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	if cc.closed {
-		return nil
+		return
 	}
 	cc.closed = true
 	close(cc.doneCh)
-	return nil
 }
 
-func (cc *chunkAccessor) openChunk(ctx context.Context, cID string) error {
+func (cc *ChunkAccessor) openChunk(ctx context.Context, cID string) error {
 	for {
 		cc.lock.Lock()
 		if cc.closed {
@@ -104,7 +108,8 @@ func (cc *chunkAccessor) openChunk(ctx context.Context, cID string) error {
 	}
 }
 
-func (cc *chunkAccessor) setWriting(ctx context.Context, cID string) error {
+// SetWriting requests writing access to the chunk. The function must followed by SetIdle() call to release the write access
+func (cc *ChunkAccessor) SetWriting(ctx context.Context, cID string) error {
 	for {
 		cc.lock.Lock()
 		if cc.closed {
@@ -142,7 +147,7 @@ func (cc *chunkAccessor) setWriting(ctx context.Context, cID string) error {
 }
 
 // setDeleting tries to set Deleting state, and it returns true if successlul. It will return false otherwise.
-func (cc *chunkAccessor) setDeleting(cID string) bool {
+func (cc *ChunkAccessor) setDeleting(cID string) bool {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	if cc.closed {
@@ -156,7 +161,8 @@ func (cc *chunkAccessor) setDeleting(cID string) bool {
 	return !ok
 }
 
-func (cc *chunkAccessor) setIdle(cID string) {
+// SetIdle closes the Writing (SetWriting) and Deleting (SetDeleting) exclusive access
+func (cc *ChunkAccessor) SetIdle(cID string) {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	cr, ok := cc.chunks[cID]
@@ -169,7 +175,7 @@ func (cc *chunkAccessor) setIdle(cID string) {
 	}
 }
 
-func (cc *chunkAccessor) closeChunk(cID string) error {
+func (cc *ChunkAccessor) closeChunk(cID string) error {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	cr, ok := cc.chunks[cID]
