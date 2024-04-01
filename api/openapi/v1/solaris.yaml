@@ -47,8 +47,12 @@ paths:
             schema:
               $ref: '#/components/schemas/DeleteLogsRequest'
       responses:
-        204:
+        200:
           description: The logs matching the filter condition were deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteLogsResponse'
 
   /logs/{logId}:
     put:
@@ -89,6 +93,10 @@ paths:
       responses:
         201:
           description: The records were created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRecordsResponse'
         404:
           description: The log was not found.
 
@@ -231,6 +239,16 @@ components:
           type: string
           description: The filter condition.
 
+    DeleteLogsResponse:
+      type: object
+      description: The response object to the delete logs request.
+      required:
+        - deleted
+      properties:
+        deleted:
+          type: integer
+          description: The number of logs deleted.
+
     CreateRecordRequest:
       type: object
       description: The request object to create a record.
@@ -253,6 +271,16 @@ components:
           description: The list of records to be created.
           items:
             $ref: '#/components/schemas/CreateRecordRequest'
+
+    CreateRecordsResponse:
+      type: object
+      description: The response object to the create records request.
+      required:
+        - added
+      properties:
+        added:
+          type: integer
+          description: The number of records added.
 
     QueryRecordsResult:
       type: object

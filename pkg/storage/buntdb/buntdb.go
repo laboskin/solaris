@@ -58,6 +58,8 @@ type (
 	}
 )
 
+const maxULID = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"
+
 // NewStorage creates new logs meta storage based on BuntDB
 func NewStorage(cfg Config) *Storage {
 	return &Storage{cfg: &cfg}
@@ -134,12 +136,12 @@ func (s *Storage) UpdateLog(ctx context.Context, log *solaris.Log) (*solaris.Log
 	tx := mustBeginTx(s.db, true)
 	defer mustRollback(tx)
 
-	_, err := s.getLogEntry(tx, logKey(log.ID), true)
+	le, err := s.getLogEntry(tx, logKey(log.ID), true)
 	if err != nil {
 		return nil, err
 	}
 
-	le := toEntry(log)
+	le.Tags = log.Tags
 	le.UpdatedAt = timestamppb.Now()
 
 	key := logKey(le.ID)
@@ -166,7 +168,7 @@ func (s *Storage) QueryLogs(ctx context.Context, qr storage.QueryLogsRequest) (*
 		if err != nil {
 			return nil, fmt.Errorf("queryLogsByIDs(IDs=%v) failed: %w", qr.IDs, err)
 		}
-	} else if len(qr.Condition) > 0 {
+	} else {
 		qRes, err = s.queryLogsByCondition(ctx, qr, !qr.Deleted)
 		if err != nil {
 			return nil, fmt.Errorf("queryLogsByCondition(Cond=%s) failed: %w", qr.Condition, err)
@@ -379,7 +381,7 @@ func (s *Storage) queryLogsByCondition(ctx context.Context, qr storage.QueryLogs
 	tx := mustBeginTx(s.db, false)
 	defer mustRollback(tx)
 
-	if err = tx.AscendGreaterOrEqual("", logKey(qr.Page), iter); err != nil {
+	if err = tx.AscendRange("", logKey(qr.Page), logKey(maxULID), iter); err != nil {
 		return nil, fmt.Errorf("iteration failed: %w", err)
 	}
 	if iterErr != nil {
@@ -499,7 +501,7 @@ func getLogChunks(ctx context.Context, tx *buntdb.Tx, logID string) ([]logfs.Chu
 }
 
 func chnkKey(logID, chnkID string) string {
-	return fmt.Sprintf("%s/chunks/%s", logKey(logID), chnkID)
+	return fmt.Sprintf("/chunks/%s/%s", logID, chnkID)
 }
 
 // ===================================== helpers =====================================

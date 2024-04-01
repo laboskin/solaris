@@ -103,7 +103,7 @@ func (s *Service) QueryRecords(ctx context.Context, request *solaris.QueryRecord
 		if err != nil {
 			return nil, errors.GRPCWrap(err)
 		}
-		logIDs := make([]string, len(qr.Logs))
+		logIDs = make([]string, len(qr.Logs))
 		for i, l := range qr.Logs {
 			logIDs[i] = l.ID
 		}

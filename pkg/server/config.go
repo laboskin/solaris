@@ -27,6 +27,8 @@ type (
 	Config struct {
 		// GrpcTransport specifies grpc transport configuration
 		GrpcTransport *transport.Config
+		// HttpPort defines the port for listening incoming HTTP connections
+		HttpPort int
 		// MetaDBFilePath specifies logs and chunks metadata is stored,
 		// if left empty, in-memory storage is used
 		MetaDBFilePath string
@@ -42,6 +44,7 @@ type (
 func getDefaultConfig() *Config {
 	return &Config{
 		GrpcTransport:     transport.GetDefaultGRPCConfig(),
+		HttpPort:          8080,
 		MetaDBFilePath:    ":memory:",
 		LocalDBFilePath:   "slogs",
 		MaxOpenedLogFiles: 100,
