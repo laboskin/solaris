@@ -206,6 +206,12 @@ func (cc *callControl) watcher() {
 	}
 }
 
+func (cc *callControl) getWatchersCount() int {
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	return cc.watchers
+}
+
 func (fs *futures) Len() int {
 	return len(*fs)
 }

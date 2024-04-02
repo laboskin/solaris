@@ -33,14 +33,14 @@ func TestCall(t *testing.T) {
 	call(cc, func() { atomic.AddInt32(&called, 1) }, time.Millisecond)
 	time.Sleep(20 * time.Millisecond)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&called))
-	assert.Equal(t, 1, cc.watchers)
+	assert.Equal(t, 1, cc.getWatchersCount())
 
 	f := call(cc, func() { atomic.AddInt32(&called, 1) }, 10*time.Millisecond)
 	f.Cancel()
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&called))
 
-	assert.Equal(t, 1, cc.watchers)
+	assert.Equal(t, 1, cc.getWatchersCount())
 
 	call(cc, func() { atomic.AddInt32(&called, 1) }, 0)
 	time.Sleep(10 * time.Millisecond)
@@ -53,9 +53,9 @@ func TestBunch(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		call(cc, func() { atomic.AddInt32(&called, 1) }, time.Millisecond)
 	}
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, int32(1000), atomic.LoadInt32(&called))
-	assert.Equal(t, cc.maxWorkers, cc.watchers)
+	assert.Equal(t, cc.maxWorkers, cc.getWatchersCount())
 }
 
 func TestBunch2(t *testing.T) {
@@ -67,10 +67,10 @@ func TestBunch2(t *testing.T) {
 	}
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, int32(1000), atomic.LoadInt32(&called))
-	assert.Equal(t, cc.maxWorkers, cc.watchers)
+	assert.Equal(t, cc.maxWorkers, cc.getWatchersCount())
 
 	time.Sleep(200 * time.Millisecond)
-	assert.Equal(t, 0, cc.watchers)
+	assert.Equal(t, 0, cc.getWatchersCount())
 }
 
 func TestCancelMany(t *testing.T) {
@@ -89,5 +89,5 @@ func TestCancelMany(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	assert.Equal(t, int32(50), atomic.LoadInt32(&called))
-	assert.Equal(t, 1, cc.watchers)
+	assert.Equal(t, 1, cc.getWatchersCount())
 }
