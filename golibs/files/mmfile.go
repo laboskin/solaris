@@ -143,6 +143,15 @@ func (mmf *MMFile) Grow(newSize int64) (err error) {
 	return
 }
 
+// Flush allows to sync the mapped file to the disk. The operation can be long, so should be called often
+func (mmf *MMFile) Flush() error {
+	if mmf.f == nil {
+		return errors.ErrClosed
+	}
+	mmf.mf.Flush()
+	return nil
+}
+
 // Buffer returns Mapped memory slice to be read and written.
 func (mmf *MMFile) Buffer(offs int64, size int) ([]byte, error) {
 	if offs < 0 || offs >= mmf.size {
@@ -169,6 +178,7 @@ func (mmf *MMFile) unmap() {
 		return
 	}
 	mmf.mf.Unmap()
+	mmf.mf = nil
 }
 
 func checkSize(size int64) error {

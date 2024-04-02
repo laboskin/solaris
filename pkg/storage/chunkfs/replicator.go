@@ -27,11 +27,12 @@ import (
 )
 
 // Replicator struct implements the object which controls the state of the local file-system and allows to move
-// the chunks from the local FS to a remote storage forth and back.
+// the chunks from the local FS to a remote Storage forth and back.
 type Replicator struct {
-	cc           *chunkAccessor
+	Storage sss.Storage    `inject:""`
+	CA      *ChunkAccessor `inject:""`
+
 	fileNameByID func(id string) string
-	storage      sss.Storage
 	logger       logging.Logger
 }
 
@@ -40,24 +41,32 @@ const (
 	RFRemoteSync   = 1 << 1
 )
 
-// UploadChunk moves the chunk with ID from the local FS to the remote storage.
+// NewReplicator creates new instance of Replicator
+func NewReplicator(fileNameByID func(id string) string) *Replicator {
+	r := new(Replicator)
+	r.fileNameByID = fileNameByID
+	r.logger = logging.NewLogger("chunkfs.Replicator")
+	return r
+}
+
+// UploadChunk moves the chunk with ID from the local FS to the remote Storage.
 func (r *Replicator) UploadChunk(ctx context.Context, cID string) error {
-	if err := r.cc.setWriting(ctx, cID); err != nil {
+	if err := r.CA.SetWriting(ctx, cID); err != nil {
 		return err
 	}
-	defer r.cc.setIdle(cID)
+	defer r.CA.SetIdle(cID)
 	return r.zipAndUploadChunk(ctx, cID)
 }
 
-// DownloadChunk allows to download the chunk by its ID from the remote storage to the local FS.
+// DownloadChunk allows to download the chunk by its ID from the remote Storage to the local FS.
 // The RFRemoteSync flag specifies whether the chunk will be downloaded even if the chunk file already
 // exists on the file system. If the chunk file doesn't exist locally, it will be downloaded anyway from the
-// remote storage
+// remote Storage
 func (r *Replicator) DownloadChunk(ctx context.Context, cID string, flags int) error {
-	if err := r.cc.setWriting(ctx, cID); err != nil {
+	if err := r.CA.SetWriting(ctx, cID); err != nil {
 		return err
 	}
-	defer r.cc.setIdle(cID)
+	defer r.CA.SetIdle(cID)
 
 	fn := r.fileNameByID(cID)
 	if flags&RFRemoteSync == 0 {
@@ -67,26 +76,34 @@ func (r *Replicator) DownloadChunk(ctx context.Context, cID string, flags int) e
 		}
 	}
 
-	r.logger.Debugf("downolading chunk cID=%s from remote storage", cID)
+	r.logger.Debugf("downolading chunk cID=%s from remote Storage", cID)
 	zfn := fn + ".zip"
 	defer os.Remove(zfn)
 	if err := r.downloadZip(ctx, cID, zfn); err != nil {
 		return err
 	}
-	return r.unzip(zfn, fn)
+	if err := r.unzip(zfn, fn); err != nil {
+		return err
+	}
+
+	// the scanInfo file allows to let Scanner know about the fact, that the chunk was just downloaded
+	if err := createScanInfo(cID, fn); err != nil {
+		r.logger.Warnf("the file chunk %s is downloaeded to %s, but the scan info could not be created: %s", cID, fn, err)
+	}
+	return nil
 }
 
-// DeleteChunk allows to delete the chunk locally. The function may upload the chunk to the remote storage
+// DeleteChunk allows to delete the chunk locally. The function may upload the chunk to the remote Storage
 // before being deleted (the flags&RFRemoteSync != 0), or to remove the chunk locally only (no flags required) and
 // remove it locally and remotely (flags&RFRemoteDelete != 0)
 func (r *Replicator) DeleteChunk(ctx context.Context, cID string, flags int) error {
 	if flags&RFRemoteDelete != 0 && flags&RFRemoteSync != 0 {
 		return fmt.Errorf("the flags RFRemoteDelete and RFRemoteSync cannot be specified both when a chunk is removed. cID=%s: %w", cID, errors.ErrInvalid)
 	}
-	if ok := r.cc.setDeleting(cID); !ok {
+	if ok := r.CA.setDeleting(cID); !ok {
 		return fmt.Errorf("the chunk cID=%s, is used and cannot be deleted at the time: %w", cID, errors.ErrConflict)
 	}
-	defer r.cc.setIdle(cID)
+	defer r.CA.SetIdle(cID)
 	r.logger.Debugf("deleting chunk cID=%s, flags=%d", cID, flags)
 	var resErr error
 	if flags&RFRemoteSync != 0 {
@@ -103,7 +120,7 @@ func (r *Replicator) DeleteChunk(ctx context.Context, cID string, flags int) err
 	}
 
 	if flags&RFRemoteDelete != 0 {
-		err := r.storage.Delete(ctx, getStorageKey(cID))
+		err := r.Storage.Delete(ctx, getStorageKey(cID))
 		if err != nil {
 			r.logger.Warnf("could not delete the chunk cID=%s remotely: %s", cID, err)
 			resErr = err
@@ -118,6 +135,12 @@ func (r *Replicator) zipAndUploadChunk(ctx context.Context, cID string) error {
 	zfn := fn + ".zip"
 	defer os.Remove(zfn)
 
+	// check whether the file is not empty
+	fi, err := os.Stat(fn)
+	if err != nil || fi.Size() == 0 {
+		return err
+	}
+
 	if err := zipFile(cID, fn, zfn); err != nil {
 		return err
 	}
@@ -129,7 +152,7 @@ func (r *Replicator) zipAndUploadChunk(ctx context.Context, cID string) error {
 	}
 	defer zf.Close()
 
-	return r.storage.Put(ctx, getStorageKey(cID), zf)
+	return r.Storage.Put(ctx, getStorageKey(cID), zf)
 }
 
 func zipFile(cID, fn, zfn string) error {
@@ -162,7 +185,7 @@ func getStorageKey(cID string) string {
 }
 
 func (r *Replicator) downloadZip(ctx context.Context, cID, zfn string) error {
-	rdr, err := r.storage.Get(ctx, getStorageKey(cID))
+	rdr, err := r.Storage.Get(ctx, getStorageKey(cID))
 	if err != nil {
 		return err
 	}

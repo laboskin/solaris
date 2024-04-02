@@ -45,7 +45,7 @@ func TestReadWriteSimple(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	p := chunkfs.NewProvider(dir, 1, chunkfs.GetDefaultConfig())
+	p := testProvider(dir, 1, chunkfs.GetDefaultConfig())
 	defer p.Close()
 
 	ll := NewLocalLog(GetDefaultConfig())
@@ -90,7 +90,7 @@ func TestAppendRecordsLimits(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	p := chunkfs.NewProvider(dir, 1, chunkfs.Config{
+	p := testProvider(dir, 1, chunkfs.Config{
 		NewSize:             files.BlockSize,
 		MaxChunkSize:        2 * files.BlockSize,
 		MaxGrowIncreaseSize: files.BlockSize,
@@ -129,7 +129,7 @@ func TestQueryRecords(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	p := chunkfs.NewProvider(dir, 1, chunkfs.Config{
+	p := testProvider(dir, 1, chunkfs.Config{
 		NewSize:             files.BlockSize,
 		MaxChunkSize:        2 * files.BlockSize,
 		MaxGrowIncreaseSize: files.BlockSize,
@@ -181,7 +181,7 @@ func TestConcurrentMess(t *testing.T) {
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	p := chunkfs.NewProvider(dir, 1, chunkfs.Config{
+	p := testProvider(dir, 1, chunkfs.Config{
 		NewSize:             files.BlockSize,
 		MaxChunkSize:        2 * files.BlockSize,
 		MaxGrowIncreaseSize: files.BlockSize,
@@ -241,4 +241,12 @@ func generateRecords(count, size int) []*solaris.Record {
 		res[i] = &solaris.Record{Payload: b}
 	}
 	return res
+}
+
+func testProvider(dir string, maxOpenedChunks int, cfg chunkfs.Config) *chunkfs.Provider {
+	p := chunkfs.NewProvider(dir, maxOpenedChunks, cfg)
+	p.CA = chunkfs.NewChunkAccessor()
+	p.Replicator = chunkfs.NewReplicator(p.GetFileNameByID)
+	p.Replicator.CA = p.CA
+	return p
 }
