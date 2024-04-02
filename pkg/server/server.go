@@ -21,9 +21,9 @@ import (
 	"github.com/solarisdb/solaris/golibs/errors"
 	"github.com/solarisdb/solaris/golibs/files"
 	"github.com/solarisdb/solaris/golibs/logging"
+	"github.com/solarisdb/solaris/golibs/sss/inmem"
 	"github.com/solarisdb/solaris/pkg/api"
 	"github.com/solarisdb/solaris/pkg/api/rest"
-	"github.com/solarisdb/solaris/golibs/sss/inmem"
 	"github.com/solarisdb/solaris/pkg/grpc"
 	"github.com/solarisdb/solaris/pkg/http"
 	"github.com/solarisdb/solaris/pkg/storage/buntdb"
@@ -62,7 +62,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	// Http API (endpoints)
 	rst := rest.New(gsvc)
 
-  // chunksfs
+	// chunkfs
 	provider := chunkfs.NewProvider(cfg.LocalDBFilePath, cfg.MaxOpenedLogFiles, chunkfs.GetDefaultConfig())
 	replicator := chunkfs.NewReplicator(provider.GetFileNameByID)
 
