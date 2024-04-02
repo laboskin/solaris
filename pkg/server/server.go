@@ -17,11 +17,15 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/errors"
 	"github.com/solarisdb/solaris/golibs/files"
 	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/sss/inmem"
+	"github.com/solarisdb/solaris/pkg/api"
+	"github.com/solarisdb/solaris/pkg/api/rest"
 	"github.com/solarisdb/solaris/pkg/grpc"
+	"github.com/solarisdb/solaris/pkg/http"
 	"github.com/solarisdb/solaris/pkg/storage/buntdb"
 	"github.com/solarisdb/solaris/pkg/storage/cache"
 	"github.com/solarisdb/solaris/pkg/storage/chunkfs"
@@ -48,16 +52,21 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	// gRPC server
+	gsvc := api.NewService()
 	var grpcRegF grpc.RegisterF = func(gs *ggrpc.Server) error {
 		grpc_health_v1.RegisterHealthServer(gs, health.NewServer())
+		solaris.RegisterServiceServer(gs, gsvc)
 		return nil
 	}
 
+	// Http API (endpoints)
+	rst := rest.New(gsvc)
+
+	// chunkfs
 	provider := chunkfs.NewProvider(cfg.LocalDBFilePath, cfg.MaxOpenedLogFiles, chunkfs.GetDefaultConfig())
 	replicator := chunkfs.NewReplicator(provider.GetFileNameByID)
 
 	inj := linker.New()
-	inj.Register(linker.Component{Name: "", Value: grpc.NewServer(grpc.Config{Transport: *cfg.GrpcTransport, RegisterEndpoints: grpcRegF})})
 	inj.Register(linker.Component{Name: "", Value: cache.NewCachedStorage(buntdb.NewStorage(buntdb.Config{DBFilePath: cfg.MetaDBFilePath}))})
 	inj.Register(linker.Component{Name: "", Value: provider})
 	inj.Register(linker.Component{Name: "", Value: chunkfs.NewChunkAccessor()})
@@ -65,6 +74,9 @@ func Run(ctx context.Context, cfg *Config) error {
 	inj.Register(linker.Component{Name: "", Value: chunkfs.NewScanner(replicator, chunkfs.GetDefaultScannerConfig())})
 	inj.Register(linker.Component{Name: "", Value: inmem.NewStorage()})
 	inj.Register(linker.Component{Name: "", Value: logfs.NewLocalLog(logfs.GetDefaultConfig())})
+	inj.Register(linker.Component{Name: "", Value: gsvc})
+	inj.Register(linker.Component{Name: "", Value: grpc.NewServer(grpc.Config{Transport: *cfg.GrpcTransport, RegisterEndpoints: grpcRegF})})
+	inj.Register(linker.Component{Name: "", Value: http.NewRouter(http.Config{HttpPort: cfg.HttpPort, RestRegistrar: rst.RegisterEPs})})
 
 	inj.Init(ctx)
 	<-ctx.Done()
