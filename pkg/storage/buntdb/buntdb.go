@@ -346,7 +346,7 @@ func (s *Storage) queryLogsByCondition(ctx context.Context, qr storage.QueryLogs
 	if err != nil {
 		return nil, fmt.Errorf("condition=%q parse error=%v: %w", qr.Condition, err, errors.ErrInvalid)
 	}
-	tstF, err := ql.BuildExprF(expr, ql.LogsCondDialect)
+	tstF, err := ql.BuildExprF(expr, ql.LogsCondValueDialect)
 	if err != nil {
 		return nil, fmt.Errorf("could not compile condition=%s: %w", qr.Condition, err)
 	}

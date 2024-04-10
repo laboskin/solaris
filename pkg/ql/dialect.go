@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/errors"
+	"strings"
 	"time"
 )
 
@@ -50,6 +51,8 @@ type (
 		// CheckF is used for calculating the parameter value while building an evaluator function
 		// If not specified, then the parameter is always correct
 		CheckF func(p *Param) error
+		// TranslateF is the function (can be nil), which is called for translation the parameter p to the dialect.
+		TranslateF func(tr Translator[T], sb *strings.Builder, p Param) error
 		// ValueF is the function which allows to get the parameter value. The function MUST NOT be called
 		// if the CheckF returns an error
 		ValueF valueF[T]
@@ -72,7 +75,7 @@ const (
 var typeNames = []string{"unknown", "string", "time", "bool", "strings"}
 
 var (
-	LogsCondDialect = Dialect[*solaris.Log]{
+	LogsCondValueDialect = Dialect[*solaris.Log]{
 		StringParamID: { // strings are rvalues only
 			Flags: PfRValue | PfComparable | PfConstValue,
 			ValueF: func(p *Param, _ *solaris.Log) (any, error) {
@@ -121,7 +124,62 @@ var (
 			Type: VTString,
 		},
 	}
-	RecordsCondDialect = Dialect[*solaris.Record]{
+	LogsCondTranslateDialect = Dialect[*solaris.Log]{
+		StringParamID: {
+			Flags: PfRValue | PfComparable, // strings are rvalues only
+			TranslateF: func(tr Translator[*solaris.Log], sb *strings.Builder, p Param) error {
+				// use single quotes for string constants
+				sb.WriteString("'")
+				sb.WriteString(*p.Const.String)
+				sb.WriteString("'")
+				return nil
+			},
+		},
+		ArrayParamID: {
+			Flags: PfRValue,
+			TranslateF: func(tr Translator[*solaris.Log], sb *strings.Builder, p Param) error {
+				sb.WriteString("(")
+				for i, c := range p.Array {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					if c.String == nil {
+						return fmt.Errorf("array must contain only strings: %w", errors.ErrInvalid)
+					}
+					sb.WriteString("'")
+					sb.WriteString(*c.String)
+					sb.WriteString("'")
+				}
+				sb.WriteString(")")
+				return nil
+			},
+		}, // arrays are rvalues only
+		"logID": {
+			Flags: PfLValue | PfComparable | PfInLike,
+			TranslateF: func(tr Translator[*solaris.Log], sb *strings.Builder, p Param) error {
+				sb.WriteString("id")
+				return nil
+			},
+		},
+		"tag": { // tag function is written the way -> 'tag("abc") in ["1", "2", "3"]' or 'tag("t1") = "aaa"'
+			Flags: PfLValue | PfComparable | PfRValue | PfInLike,
+			TranslateF: func(tr Translator[*solaris.Log], sb *strings.Builder, p Param) error {
+				if p.Function == nil {
+					return fmt.Errorf("tag must be a function: %w", errors.ErrInvalid)
+				}
+				if len(p.Function.Params) != 1 {
+					return fmt.Errorf("tag() function expects only one parameter - the name of the tag: %w", errors.ErrInvalid)
+				}
+				if p.Function.Params[0].ID() != StringParamID {
+					return fmt.Errorf("tag() function expects the tag name (string) as the parameter: %w", errors.ErrInvalid)
+				}
+				sb.WriteString("tags ->> ")
+				_ = tr.Param2Sql(sb, p.Function.Params[0])
+				return nil
+			},
+		},
+	}
+	RecordsCondValueDialect = Dialect[*solaris.Record]{
 		StringParamID: { // strings are rvalues only
 			Flags: PfRValue | PfComparable | PfConstValue,
 			ValueF: func(p *Param, _ *solaris.Record) (any, error) {

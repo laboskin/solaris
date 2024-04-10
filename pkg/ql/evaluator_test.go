@@ -110,7 +110,7 @@ func Test_like(t *testing.T) {
 func TestLogCondEval_EvalTrue(t *testing.T) {
 	expr, err := Parse("tag('tag1') = 'val1' OR tag('tag2') IN ['val22'] OR tag('tag3') like '%val333%'")
 	assert.Nil(t, err)
-	eval, err := BuildExprF(expr, LogsCondDialect)
+	eval, err := BuildExprF(expr, LogsCondValueDialect)
 	assert.Nil(t, err)
 
 	for i := 1; i < 5; i++ {
@@ -126,7 +126,7 @@ func TestLogCondEval_EvalTrue(t *testing.T) {
 func TestLogCondEval_EvalFalse(t *testing.T) {
 	expr, err := Parse("tag('tag1') like '%v%' AND NOT tag('tag2') IN ['val2']")
 	assert.Nil(t, err)
-	eval, err := BuildExprF(expr, LogsCondDialect)
+	eval, err := BuildExprF(expr, LogsCondValueDialect)
 	assert.Nil(t, err)
 
 	log1 := &solaris.Log{ID: ulidutils.NewID(), Tags: map[string]string{

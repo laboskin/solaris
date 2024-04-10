@@ -83,6 +83,23 @@ docker-pull: ## pulls the docker image from the registry
 docker-rmi: ## removes the docker image
 	docker rmi -f $(shell docker images --filter=reference=${IMAGE_NAME} -q | uniq)
 
+# docker-compose
+.PHONY: compose-up
+compose-up: docker-build ## run the docker compose
+	docker-compose -f docker-compose.yaml up --detach
+
+.PHONY: compose-down
+compose-down:  ## stop the docker compose
+	docker-compose -f docker-compose.yaml down --remove-orphans
+
+.PHONY: compose-drop
+compose-drop:  ## stop the docker compose and remove the volumes
+	docker-compose -f docker-compose.yaml down --volume --remove-orphans
+
+.PHONY: compose-logs
+compose-logs:  ## show the docker compose logs
+	docker-compose -f docker-compose.yaml logs --follow
+
 # generate help info from comments: thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 .PHONY: help
 help: ## help information about make commands

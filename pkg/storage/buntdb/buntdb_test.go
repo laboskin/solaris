@@ -101,6 +101,10 @@ func TestStorage_QueryLogsByCondition(t *testing.T) {
 	log3, err = s.CreateLog(ctx, log3)
 	assert.Nil(t, err)
 
+	log4 := &solaris.Log{Tags: map[string]string{"a": "b"}}
+	log4, err = s.CreateLog(ctx, log4)
+	assert.Nil(t, err)
+
 	qr, err := s.QueryLogs(ctx, storage.QueryLogsRequest{Condition: "tag('tag3') = 'val3' OR tag('tag3') = 'val4' OR tag('tag1') like 'v%1'", Limit: 2})
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(qr.Logs))
@@ -287,15 +291,15 @@ func TestStorage_GetChunks(t *testing.T) {
 	cis2, err := s.GetChunks(ctx, log.ID)
 	assert.Nil(t, err)
 	assert.Equal(t, len(cis1), len(cis2))
+
+	_, err = s.GetChunks(ctx, "noID")
+	assert.ErrorIs(t, err, errors.ErrNotExist)
 }
 
 func TestStorage_UpsertChunkInfos(t *testing.T) {
 	ctx := context.Background()
 	s, err := getStorage(ctx)
 	assert.Nil(t, err)
-
-	_, err = s.GetChunks(ctx, "noID")
-	assert.ErrorIs(t, err, errors.ErrNotExist)
 
 	log := &solaris.Log{}
 	log, err = s.CreateLog(ctx, log)
