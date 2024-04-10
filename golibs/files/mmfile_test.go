@@ -107,7 +107,7 @@ func TestGrowMMFile(t *testing.T) {
 	// after the growth the mod time should be changed
 	fi1, err := os.Stat(fn)
 	assert.Nil(t, err)
-	assert.True(t, fi1.ModTime().After(fi.ModTime()))
+	assert.True(t, fi1.ModTime().UTC().After(fi.ModTime().UTC()))
 
 	res, err = mmf.Buffer(4093, len(buf))
 	assert.Nil(t, err)
