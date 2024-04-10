@@ -218,7 +218,7 @@ func Test_CreateAndReadScanInfo(t *testing.T) {
 	assert.Nil(t, err)
 	fi, _ := os.Stat(fn)
 	assert.True(t, time.Now().After(*si.SyncTime) || time.Now().Equal(*si.SyncTime))
-	assert.Equal(t, fi.ModTime(), si.Mtime)
+	assert.Equal(t, fi.ModTime().UTC(), si.Mtime.UTC())
 	assert.Equal(t, si.ID, cID)
 }
 
