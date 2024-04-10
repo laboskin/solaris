@@ -29,8 +29,8 @@ type (
 		GrpcTransport *transport.Config
 		// HttpPort defines the port for listening incoming HTTP connections
 		HttpPort int
-		// MetaDB specifies DBConn for storing the logs and chunks metadata
-		MetaDB *DBConn
+		// DB specifies DBConn for storing the logs and chunks metadata
+		DB *DBConn
 		// LocalDBFilePath specifies where the logs data is stored
 		LocalDBFilePath string
 		// MaxOpenedLogFiles allows to control number of files opened at a time to work with the solaris data
@@ -76,7 +76,7 @@ func getDefaultConfig() *Config {
 		HttpPort:          8080,
 		LocalDBFilePath:   "slogs",
 		MaxOpenedLogFiles: 100,
-		MetaDB: &DBConn{
+		DB: &DBConn{
 			Driver:   "postgres",
 			Host:     "localhost",
 			Port:     "5432",

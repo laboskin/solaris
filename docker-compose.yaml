@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   engine:
-    image: solarisdb/solaris:latest
+    image: solaris:latest
     restart: always
     depends_on:
       db:
