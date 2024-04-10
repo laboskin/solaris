@@ -43,7 +43,7 @@ Solaris supports the following functions:
 - `tag(<name>)` - returns the tag value for a log. Name could be a string constant or any other argument value
 
 ### List of constants
-Some constants maybe groupped in a list. The List defined like the coma-separted constants in between `[` and `]`:
+Some constants maybe grouped in a list. The List defined like the coma-separated constants in between `[` and `]`:
 
 ```
 ["a", "b", 'c'] 
