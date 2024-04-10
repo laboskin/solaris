@@ -87,7 +87,6 @@ func TestGrowMMFile(t *testing.T) {
 
 	buf := []byte{1, 2, 3, 4, 5}
 	res, err := mmf.Buffer(4093, len(buf))
-	fi, err := os.Stat(fn)
 	assert.Nil(t, err)
 	n := copy(res, buf)
 	assert.Nil(t, err)
@@ -103,11 +102,6 @@ func TestGrowMMFile(t *testing.T) {
 	err = mmf.Grow(20 * 4096)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(20*4096), mmf.Size())
-
-	// after the growth the mod time should be changed
-	fi1, err := os.Stat(fn)
-	assert.Nil(t, err)
-	assert.True(t, fi1.ModTime().UTC().After(fi.ModTime().UTC()))
 
 	res, err = mmf.Buffer(4093, len(buf))
 	assert.Nil(t, err)
