@@ -23,7 +23,6 @@ func logToRest(sLog *solaris.Log) restapi.Log {
 	var rLog restapi.Log
 	rLog.Id = sLog.ID
 	rLog.Tags = sLog.Tags
-	rLog.Records = int(sLog.Records)
 	if sLog.CreatedAt != nil {
 		rLog.CreatedAt = sLog.CreatedAt.AsTime()
 	}

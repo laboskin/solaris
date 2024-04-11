@@ -47,8 +47,6 @@ message Log {
   google.protobuf.Timestamp createdAt = 3;
   // updatedAt is the timestamp when the log was updated (new records added or tags are applied)
   google.protobuf.Timestamp updatedAt = 4;
-  // records is the number of records in the log
-  int64 records = 5;
 }
 
 // AppendRecordsRequest describes the parameters for AppendRecords() call

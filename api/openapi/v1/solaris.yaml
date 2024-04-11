@@ -141,7 +141,6 @@ components:
       required:
         - id
         - tags
-        - records
         - createdAt
         - updatedAt
       properties:
@@ -150,9 +149,6 @@ components:
           description: The log identifier.
         tags:
           $ref: '#/components/schemas/Tags'
-        records:
-          type: integer
-          description: The number of records in the log.
         createdAt:
           type: string
           description: The timestamp when the log was created.

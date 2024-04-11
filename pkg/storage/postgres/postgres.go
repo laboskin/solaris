@@ -75,8 +75,8 @@ func (s *Storage) UpdateLog(ctx context.Context, log *solaris.Log) (*solaris.Log
 	if len(log.ID) == 0 {
 		return nil, fmt.Errorf("log ID must be specified: %w", errors.ErrInvalid)
 	}
-	rows, err := s.db.QueryxContext(ctx, "update log set tags = $1, records = $2, updated_at = $3 where id = $4 and deleted = false returning *",
-		Tags(log.Tags).JSON(), log.Records, time.Now(), log.ID)
+	rows, err := s.db.QueryxContext(ctx, "update log set tags = $1, updated_at = $2 where id = $3 and deleted = false returning *",
+		Tags(log.Tags).JSON(), time.Now(), log.ID)
 	if err != nil {
 		return nil, MapError(err)
 	}

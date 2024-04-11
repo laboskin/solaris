@@ -23,9 +23,8 @@ import (
 
 func logToModel(l *solaris.Log) Log {
 	ml := Log{
-		ID:      l.ID,
-		Tags:    l.Tags,
-		Records: l.Records,
+		ID:   l.ID,
+		Tags: l.Tags,
 	}
 	if l.CreatedAt != nil {
 		ml.CreatedAt = l.CreatedAt.AsTime()
@@ -40,7 +39,6 @@ func logToAPI(l Log) *solaris.Log {
 	return &solaris.Log{
 		ID:        l.ID,
 		Tags:      l.Tags,
-		Records:   l.Records,
 		CreatedAt: timestamppb.New(l.CreatedAt),
 		UpdatedAt: timestamppb.New(l.UpdatedAt),
 	}
