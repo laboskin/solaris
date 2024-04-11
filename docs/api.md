@@ -31,7 +31,7 @@ Update log tags
 curl -v -s -XPUT -H "content-type: application/json" -d '{"tags":{"a":"b", "c":"e"}, "records":"100"}' "http://localhost:8080/v1/logs/01HV523WYP0ZSDAYEJ4JNED6F7" | jq
 ```
 
-##### PUT /logs/{id}/records
+##### POST /logs/{id}/records
 Add records to the log
 ```
 curl -v -s -XPOST -H "content-type: application/json" -d "{\"records\":[{\"payload\":\"`echo 'data123' | base64`\"}, {\"payload\":\"`echo 'data456' | base64`\"}]}" http://localhost:8080/v1/logs/01HV523WYP0ZSDAYEJ4JNED6F7/records | jq
