@@ -16,10 +16,11 @@ package storage
 
 import (
 	"context"
+	"time"
+
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/ulidutils"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 type (
@@ -79,4 +80,31 @@ func (l *LogHelper) QueryRecords(ctx context.Context, request QueryRecordsReques
 		}
 	}
 	return res, idx >= 0 && idx < len(recs), nil
+}
+
+func (l *LogHelper) CountRecords(ctx context.Context, request QueryRecordsRequest) (uint64, uint64, error) {
+	recs := l.m[request.LogID]
+	var count uint64
+	total := uint64(len(recs))
+
+	idx := 0
+	if request.Descending {
+		idx = len(recs) - 1
+		if request.StartID != "" {
+			for idx >= 0 && recs[idx].ID > request.StartID {
+				idx--
+			}
+		}
+
+		count = uint64(idx)
+	} else {
+		if request.StartID != "" {
+			for idx < len(recs) && recs[idx].ID < request.StartID {
+				idx++
+			}
+		}
+
+		count = uint64(len(recs) - idx)
+	}
+	return total, count, nil
 }

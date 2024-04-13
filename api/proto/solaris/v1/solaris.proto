@@ -94,8 +94,10 @@ message DeleteLogsResult {
 
 // CountResult returns a counted number of an operation
 message CountResult {
-  // total contains the requested number
+  // total contains total number of messages in all affected logs
   int64 total = 1;
+  // count contains number of messages matching the condition
+  int64 count = 2;
 }
 
 // QueryRecordsRequest contains arguments for requesting Log(s) records

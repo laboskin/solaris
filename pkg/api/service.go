@@ -17,14 +17,13 @@ package api
 import (
 	"context"
 	"fmt"
+
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	context2 "github.com/solarisdb/solaris/golibs/context"
 	"github.com/solarisdb/solaris/golibs/errors"
 	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/ulidutils"
 	"github.com/solarisdb/solaris/pkg/storage"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Service implements the grpc public API (see solaris.ServiceServer)
@@ -160,6 +159,42 @@ func (s *Service) QueryRecords(ctx context.Context, request *solaris.QueryRecord
 	return &solaris.QueryRecordsResult{Records: res, NextPageID: nextID}, errors.GRPCWrap(err)
 }
 
-func (s *Service) CountRecords(context.Context, *solaris.QueryRecordsRequest) (*solaris.CountResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CountRecords not implemented")
+func (s *Service) CountRecords(ctx context.Context, request *solaris.QueryRecordsRequest) (*solaris.CountResult, error) {
+	logIDs := request.LogIDs
+	if len(logIDs) == 0 {
+		// requesting maxLogsToMerge+1 to be sure that if we have more than the maximum, will interrupt the procedure
+		qr, err := s.LogsStorage.QueryLogs(ctx, storage.QueryLogsRequest{Condition: request.LogsCondition, Limit: int64(maxLogsToMerge + 1)})
+		if err != nil {
+			return nil, errors.GRPCWrap(err)
+		}
+		logIDs = make([]string, len(qr.Logs))
+		for i, l := range qr.Logs {
+			logIDs[i] = l.ID
+		}
+	}
+	if len(logIDs) > maxLogsToMerge {
+		return nil, errors.GRPCWrap(fmt.Errorf("could not merge more than %d logs together: %w", maxLogsToMerge, errors.ErrExhausted))
+	}
+
+	var total uint64
+	var count uint64
+	for idx := range logIDs {
+		t, c, err := s.LogStorage.CountRecords(ctx, storage.QueryRecordsRequest{
+			Condition: request.Condition,
+			LogID:     logIDs[idx], Descending: request.Descending,
+			StartID: request.StartRecordID,
+			Limit:   request.Limit},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		total += t
+		count += c
+	}
+
+	return &solaris.CountResult{
+		Total: int64(total),
+		Count: int64(count),
+	}, nil
 }

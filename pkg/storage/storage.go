@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 )
 
@@ -62,6 +63,9 @@ type (
 		// QueryRecords allows to retrieve records by the request. The function returns the selected records and the flag,
 		// that more records potentially available for the read
 		QueryRecords(ctx context.Context, request QueryRecordsRequest) ([]*solaris.Record, bool, error)
+		// CountRecords count total number for records in the log and number of records after (before) specified record ID
+		// Returned values are (total, count, error)
+		CountRecords(ctx context.Context, request QueryRecordsRequest) (uint64, uint64, error)
 	}
 
 	QueryRecordsRequest struct {

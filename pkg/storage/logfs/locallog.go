@@ -17,6 +17,9 @@ package logfs
 import (
 	"context"
 	"fmt"
+	"sort"
+	"sync"
+
 	"github.com/oklog/ulid/v2"
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/cast"
@@ -27,8 +30,6 @@ import (
 	"github.com/solarisdb/solaris/pkg/storage"
 	"github.com/solarisdb/solaris/pkg/storage/chunkfs"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"sort"
-	"sync"
 )
 
 type (
@@ -143,7 +144,7 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 			added += arr.Written
 		} else if ci.RecordsCount == 0 {
 			// the chunk was just created and its capacity is not enough to write at least one record!
-			gerr = fmt.Errorf("It seems the maximum chunk size is less than the record size payload=%d: %w", len(recs[0].Payload), errors.ErrInvalid)
+			gerr = fmt.Errorf("it seems the maximum chunk size is less than the record size payload=%d: %w", len(recs[0].Payload), errors.ErrInvalid)
 			break
 		}
 		ci.RecordsCount = 0
@@ -156,7 +157,7 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 	if added > 0 {
 		// use context.Background instead of ctx to avoid some unrecoverable error in case of the ctx is closed, but we have some
 		// data written
-		if err := l.LMStorage.UpsertChunkInfos(context.Background(), lid, cis); err != nil {
+		if err := l.LMStorage.UpsertChunkInfos(ctx, lid, cis); err != nil {
 			// well, now it is unrecoverable!
 			l.logger.Errorf("could not write chunk IDs=%v for logID=%s, but the data is written into chunk. The data is corrupted now: %v", cis, lid, err)
 			panic("unrecoverable error, data is corrupted")
@@ -258,6 +259,88 @@ func (l *localLog) QueryRecords(ctx context.Context, request storage.QueryRecord
 	return res, len(res) >= limit || totalSize >= l.cfg.MaxBunchSize, nil
 }
 
+// CountRecords count total number for records in the log and number of records after (before) specified record ID
+// Returned values are (total, count, error)
+func (l *localLog) CountRecords(ctx context.Context, request storage.QueryRecordsRequest) (uint64, uint64, error) {
+	lid := request.LogID
+
+	// the l.lockers plays a role of limiter as well, it doesn't allow to have more than N locks available,
+	// so the l.lockers.GetOrCreate(ctx, lid) will be blocked if number of requested locks (not the number of requests!)
+	// exceeds the maximum (N) capacity.
+	// We will request the lock for supporting the limited number of logs in a work a time, but will not to Lock it for
+	// the read operation. Only AppendRecords does this to support its atomicy.
+	ll, err := l.lockers.GetOrCreate(ctx, lid)
+	if err != nil {
+		return 0, 0, fmt.Errorf("could not obtain the log locker for id=%s: %w", lid, err)
+	}
+	defer l.lockers.Release(&ll)
+
+	cis, err := l.LMStorage.GetChunks(ctx, lid)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if len(cis) == 0 {
+		return 0, 0, nil
+	}
+
+	var total uint64
+	var count uint64
+
+	var initialIdx int
+	var idx int
+	inc := 1
+	if request.Descending {
+		inc = -1
+		idx = len(cis) - 1
+		initialIdx = len(cis) - 1
+	}
+	var sid ulid.ULID
+	// Search for first record if start id specified
+	if request.StartID != "" {
+		if err := sid.UnmarshalText(cast.StringToByteArray(request.StartID)); err != nil {
+			l.logger.Warnf("could not unmarshal startID=%s: %v", request.StartID, err)
+			return 0, 0, fmt.Errorf("wrong startID=%q: %w", request.StartID, errors.ErrInvalid)
+		}
+
+		if request.Descending {
+			idx = sort.Search(len(cis), func(i int) bool {
+				return cis[i].Min.Compare(sid) > 0
+			})
+			idx--
+		} else {
+			idx = sort.Search(len(cis), func(i int) bool {
+				return cis[i].Max.Compare(sid) >= 0
+			})
+		}
+
+		// If idx found - we found an element and need to select how many record we have
+		if idx >= 0 && idx < len(cis) {
+			total = uint64(cis[idx].RecordsCount)
+			numRecs, err := l.countRecords(ctx, cis[idx], request.Descending, sid)
+			if err != nil {
+				return 0, 0, nil
+			}
+			count += numRecs
+
+			// Calculate total of non-matching
+			for i := initialIdx; i != idx; i += inc {
+				total += uint64(cis[i].RecordsCount)
+			}
+
+			idx += inc
+		}
+	}
+
+	// Calculate total of matching records
+	for ; idx >= 0 && idx < len(cis); idx += inc {
+		l := uint64(cis[idx].RecordsCount)
+		count += l
+		total += l
+	}
+	return total, count, nil
+}
+
 func (l *localLog) readRecords(
 	ctx context.Context,
 	lid string,
@@ -297,4 +380,35 @@ func (l *localLog) readRecords(
 	}
 
 	return res, nil
+}
+
+func (l *localLog) countRecords(ctx context.Context,
+	ci ChunkInfo,
+	descending bool,
+	sid ulid.ULID) (uint64, error) {
+
+	rc, err := l.ChnkProvider.GetOpenedChunk(ctx, ci.ID, false)
+	if err != nil {
+		return 0, err
+	}
+	defer l.ChnkProvider.ReleaseChunk(&rc)
+
+	cr, err := rc.Value().OpenChunkReader(descending)
+	if err != nil {
+		return 0, err
+	}
+	defer cr.Close()
+
+	var count uint64
+	var empty ulid.ULID
+	if sid.Compare(empty) != 0 {
+		cr.SetStartID(sid)
+	}
+
+	for cr.HasNext() {
+		cr.Next()
+		count++
+	}
+
+	return count, nil
 }
