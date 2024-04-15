@@ -107,6 +107,7 @@ var (
 		"YYYY/M/DD",
 
 		// yyyy-mm-ddThh
+		"YYYY-MM-DDTHH:mm:ss.SSSZZZZZ",
 		"YYYY-MM-DDTHH:mm:ss.SSSZZZZ",
 		"YYYY-MM-DDTHH:mm:ss.SSSZ",
 		"YYYY-MM-DDTHH:mm:ssZZZZZ",
@@ -161,7 +162,7 @@ var (
 		{"m", "4", "\\d{1,2}"},
 		{"ss", "05", "\\d{2}"},
 		{"s", "5", "\\d{1,2}"},
-		{".SSS", ".999999999", ".\\d{3,}"},
+		{".SSS", ".999999999", ".\\d+"},
 		{"P", "PM", "(?:am|AM|pm|PM)"},
 		{"ZZZZZ", "-07:00", "[+-][0-9]{2}:[0-9]{2}"},
 		{"ZZZZ", "-0700", "[+-][0-9]{4}"},

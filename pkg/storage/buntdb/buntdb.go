@@ -58,8 +58,6 @@ type (
 	}
 )
 
-const maxULID = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"
-
 // NewStorage creates new logs meta storage based on BuntDB
 func NewStorage(cfg Config) *Storage {
 	return &Storage{cfg: &cfg}
@@ -381,7 +379,7 @@ func (s *Storage) queryLogsByCondition(ctx context.Context, qr storage.QueryLogs
 	tx := mustBeginTx(s.db, false)
 	defer mustRollback(tx)
 
-	if err = tx.AscendRange("", logKey(qr.Page), logKey(maxULID), iter); err != nil {
+	if err = tx.AscendRange("", logKey(qr.Page), logKey(ulidutils.MaxULID.String()), iter); err != nil {
 		return nil, fmt.Errorf("iteration failed: %w", err)
 	}
 	if iterErr != nil {

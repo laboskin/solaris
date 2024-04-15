@@ -27,9 +27,13 @@ import (
 	"github.com/solarisdb/solaris/golibs/errors"
 	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/ulidutils"
+	"github.com/solarisdb/solaris/pkg/intervals"
+	"github.com/solarisdb/solaris/pkg/ql"
 	"github.com/solarisdb/solaris/pkg/storage"
 	"github.com/solarisdb/solaris/pkg/storage/chunkfs"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"strings"
+	"time"
 )
 
 type (
@@ -68,6 +72,11 @@ type (
 		// RecordsCount is the number of records stored in the chunk
 		RecordsCount int `json:"recordsCount"`
 	}
+
+	idRange struct {
+		start ulid.ULID
+		end   ulid.ULID
+	}
 )
 
 const (
@@ -78,6 +87,11 @@ const (
 )
 
 var _ storage.Log = (*localLog)(nil)
+
+var (
+	tiBasis   = intervals.BasisTime
+	tiBuilder = ql.NewParamIntervalBuilder(tiBasis, ql.RecordsCondValueDialect, "ctime", ql.OpsAll)
+)
 
 // NewLocalLog creates the new localLog object for the cfg provided
 func NewLocalLog(cfg Config) *localLog {
@@ -217,36 +231,42 @@ func (l *localLog) QueryRecords(ctx context.Context, request storage.QueryRecord
 	if err != nil {
 		return nil, false, err
 	}
-
 	if len(cis) == 0 {
 		return nil, false, nil
 	}
 
-	var idx int
+	var fromIdx int
 	inc := 1
 	if request.Descending {
 		inc = -1
-		idx = len(cis) - 1
+		fromIdx = len(cis) - 1
 	}
+
 	var sid ulid.ULID
-	var empty ulid.ULID
 	if request.StartID != "" {
-		if err := sid.UnmarshalText(cast.StringToByteArray(request.StartID)); err != nil {
+		if err = sid.UnmarshalText(cast.StringToByteArray(request.StartID)); err != nil {
 			l.logger.Warnf("could not unmarshal startID=%s: %v", request.StartID, err)
 			return nil, false, fmt.Errorf("wrong startID=%q: %w", request.StartID, errors.ErrInvalid)
 		}
-
 		if request.Descending {
-			idx = sort.Search(len(cis), func(i int) bool {
+			fromIdx = sort.Search(len(cis), func(i int) bool {
 				return cis[i].Min.Compare(sid) > 0
 			})
-			idx--
+			fromIdx--
 			inc = -1
 		} else {
-			idx = sort.Search(len(cis), func(i int) bool {
+			fromIdx = sort.Search(len(cis), func(i int) bool {
 				return cis[i].Max.Compare(sid) >= 0
 			})
 		}
+	}
+
+	tis, err := getIntervals(request.Condition)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(request.Condition) > 0 && len(tis) == 0 {
+		return nil, false, nil
 	}
 
 	limit := int(request.Limit)
@@ -254,22 +274,26 @@ func (l *localLog) QueryRecords(ctx context.Context, request storage.QueryRecord
 		limit = l.cfg.MaxRecordsLimit
 	}
 	totalSize := 0
-	res := []*solaris.Record{}
-	for idx >= 0 && idx < len(cis) && limit > len(res) {
+
+	var res []*solaris.Record
+	for idx := fromIdx; idx >= 0 && idx < len(cis) && limit > len(res); idx += inc {
 		ci := cis[idx]
-		srecs, err := l.readRecords(ctx, lid, ci, request.Descending, sid, limit-len(res), &totalSize)
+		idRanges := getRanges(tis, ci)
+		if len(request.Condition) > 0 && len(idRanges) == 0 {
+			continue
+		}
+		srecs, err := l.readRecords(ctx, lid, ci, request.Descending, considerSIDAndDesc(idRanges, sid, request.Descending), limit-len(res), &totalSize)
 		if err != nil {
 			return nil, false, err
 		}
 		res = append(res, srecs...)
-		idx += inc
-		sid = empty
+		sid = ulidutils.ZeroULID
 	}
 	return res, len(res) >= limit || totalSize >= l.cfg.MaxBunchSize, nil
 }
 
-// CountRecords count total number for records in the log and number of records after (before) specified record ID
-// Returned values are (total, count, error)
+// CountRecords count total number for records in the log and number of records after (before)
+// specified record ID which match the request condition. Returned values are (total, count, error).
 func (l *localLog) CountRecords(ctx context.Context, request storage.QueryRecordsRequest) (uint64, uint64, error) {
 	lid := request.LogID
 
@@ -288,65 +312,69 @@ func (l *localLog) CountRecords(ctx context.Context, request storage.QueryRecord
 	if err != nil {
 		return 0, 0, err
 	}
-
 	if len(cis) == 0 {
+		return 0, 0, nil
+	}
+
+	var initIdx int
+	var fromIdx int
+
+	inc := 1
+	if request.Descending {
+		inc = -1
+		initIdx = len(cis) - 1
+		fromIdx = len(cis) - 1
+	}
+
+	var sid ulid.ULID
+	if request.StartID != "" {
+		if err = sid.UnmarshalText(cast.StringToByteArray(request.StartID)); err != nil {
+			l.logger.Warnf("could not unmarshal startID=%s: %v", request.StartID, err)
+			return 0, 0, fmt.Errorf("wrong startID=%q: %w", request.StartID, errors.ErrInvalid)
+		}
+		if request.Descending {
+			fromIdx = sort.Search(len(cis), func(i int) bool {
+				return cis[i].Min.Compare(sid) > 0
+			})
+			fromIdx--
+		} else {
+			fromIdx = sort.Search(len(cis), func(i int) bool {
+				return cis[i].Max.Compare(sid) >= 0
+			})
+		}
+	}
+
+	tis, err := getIntervals(request.Condition)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(request.Condition) > 0 && len(tis) == 0 {
 		return 0, 0, nil
 	}
 
 	var total uint64
 	var count uint64
 
-	var initialIdx int
-	var idx int
-	inc := 1
-	if request.Descending {
-		inc = -1
-		idx = len(cis) - 1
-		initialIdx = len(cis) - 1
-	}
-	var sid ulid.ULID
-	// Search for first record if start id specified
-	if request.StartID != "" {
-		if err := sid.UnmarshalText(cast.StringToByteArray(request.StartID)); err != nil {
-			l.logger.Warnf("could not unmarshal startID=%s: %v", request.StartID, err)
-			return 0, 0, fmt.Errorf("wrong startID=%q: %w", request.StartID, errors.ErrInvalid)
-		}
-
-		if request.Descending {
-			idx = sort.Search(len(cis), func(i int) bool {
-				return cis[i].Min.Compare(sid) > 0
-			})
-			idx--
-		} else {
-			idx = sort.Search(len(cis), func(i int) bool {
-				return cis[i].Max.Compare(sid) >= 0
-			})
-		}
-
-		// If idx found - we found an element and need to select how many record we have
-		if idx >= 0 && idx < len(cis) {
-			total = uint64(cis[idx].RecordsCount)
-			numRecs, err := l.countRecords(ctx, cis[idx], request.Descending, sid)
-			if err != nil {
-				return 0, 0, nil
+	for idx := initIdx; idx >= 0 && idx < len(cis); idx += inc {
+		ci := cis[idx]
+		total += uint64(ci.RecordsCount)
+		if (request.Descending && idx <= fromIdx) || (!request.Descending && idx >= fromIdx) {
+			idRanges := getRanges(tis, ci)
+			if len(request.Condition) > 0 && len(idRanges) == 0 {
+				continue
 			}
-			count += numRecs
-
-			// Calculate total of non-matching
-			for i := initialIdx; i != idx; i += inc {
-				total += uint64(cis[i].RecordsCount)
+			recCnt := uint64(ci.RecordsCount)
+			if sid.Compare(ulidutils.ZeroULID) != 0 || len(idRanges) > 0 {
+				recCnt, err = l.countRecords(ctx, ci, request.Descending, considerSIDAndDesc(idRanges, sid, request.Descending))
+				if err != nil {
+					return 0, 0, nil
+				}
 			}
-
-			idx += inc
+			count += recCnt
+			sid = ulidutils.ZeroULID
 		}
 	}
 
-	// Calculate total of matching records
-	for ; idx >= 0 && idx < len(cis); idx += inc {
-		l := uint64(cis[idx].RecordsCount)
-		count += l
-		total += l
-	}
 	return total, count, nil
 }
 
@@ -354,47 +382,50 @@ func (l *localLog) readRecords(
 	ctx context.Context,
 	lid string,
 	ci ChunkInfo,
-	descending bool,
-	sid ulid.ULID,
+	desc bool,
+	idRanges []idRange,
 	limit int,
-	totalSize *int,
-) ([]*solaris.Record, error) {
+	totalSize *int) ([]*solaris.Record, error) {
 	rc, err := l.ChnkProvider.GetOpenedChunk(ctx, ci.ID, false)
 	if err != nil {
 		return nil, err
 	}
 	defer l.ChnkProvider.ReleaseChunk(&rc)
 
-	cr, err := rc.Value().OpenChunkReader(descending)
+	cr, err := rc.Value().OpenChunkReader(desc)
 	if err != nil {
 		return nil, err
 	}
 	defer cr.Close()
 
-	var empty ulid.ULID
-	if sid.Compare(empty) != 0 {
-		cr.SetStartID(sid)
+	var res []*solaris.Record
+	for _, ir := range idRanges {
+		if ir.start.Compare(ulidutils.ZeroULID) != 0 {
+			cr.SetStartID(ir.start)
+		}
+		for cr.HasNext() && len(res) < limit && *totalSize < l.cfg.MaxBunchSize {
+			ur, _ := cr.Next()
+			if ir.end.Compare(ulidutils.ZeroULID) != 0 &&
+				((desc && ur.ID.Compare(ir.end) < 0) || (!desc && ur.ID.Compare(ir.end) > 0)) {
+				break
+			}
+			r := new(solaris.Record)
+			r.ID = ur.ID.String()
+			r.LogID = lid
+			r.Payload = make([]byte, len(ur.UnsafePayload))
+			copy(r.Payload, ur.UnsafePayload)
+			r.CreatedAt = timestamppb.New(ulid.Time(ur.ID.Time()))
+			*totalSize += len(ur.UnsafePayload)
+			res = append(res, r)
+		}
 	}
-	res := []*solaris.Record{}
-	for cr.HasNext() && len(res) < limit && *totalSize < l.cfg.MaxBunchSize {
-		ur, _ := cr.Next()
-		r := new(solaris.Record)
-		r.ID = ur.ID.String()
-		r.LogID = lid
-		r.Payload = make([]byte, len(ur.UnsafePayload))
-		copy(r.Payload, ur.UnsafePayload)
-		*totalSize += len(ur.UnsafePayload)
-		r.CreatedAt = timestamppb.New(ulid.Time(ur.ID.Time()))
-		res = append(res, r)
-	}
-
 	return res, nil
 }
 
 func (l *localLog) countRecords(ctx context.Context,
 	ci ChunkInfo,
-	descending bool,
-	sid ulid.ULID) (uint64, error) {
+	desc bool,
+	idRanges []idRange) (uint64, error) {
 
 	rc, err := l.ChnkProvider.GetOpenedChunk(ctx, ci.ID, false)
 	if err != nil {
@@ -402,22 +433,146 @@ func (l *localLog) countRecords(ctx context.Context,
 	}
 	defer l.ChnkProvider.ReleaseChunk(&rc)
 
-	cr, err := rc.Value().OpenChunkReader(descending)
+	cr, err := rc.Value().OpenChunkReader(desc)
 	if err != nil {
 		return 0, err
 	}
 	defer cr.Close()
 
 	var count uint64
-	var empty ulid.ULID
-	if sid.Compare(empty) != 0 {
-		cr.SetStartID(sid)
+	for _, ir := range idRanges {
+		if ir.start.Compare(ulidutils.ZeroULID) != 0 {
+			cr.SetStartID(ir.start)
+		}
+		for cr.HasNext() {
+			ur, _ := cr.Next()
+			if ir.end.Compare(ulidutils.ZeroULID) != 0 &&
+				((desc && ur.ID.Compare(ir.end) < 0) || (!desc && ur.ID.Compare(ir.end) > 0)) {
+				break
+			}
+			count++
+		}
 	}
-
-	for cr.HasNext() {
-		cr.Next()
-		count++
-	}
-
 	return count, nil
+}
+
+func getIntervals(cond string) ([]intervals.Interval[time.Time], error) {
+	if len(strings.TrimSpace(cond)) == 0 {
+		return nil, nil
+	}
+	expr, err := ql.Parse(cond)
+	if err != nil {
+		return nil, err
+	}
+	tis, err := tiBuilder.Build(expr)
+	if err != nil {
+		return nil, err
+	}
+	return tis, nil
+}
+
+func getRanges(tis []intervals.Interval[time.Time], ci ChunkInfo) []idRange {
+	cti := tiBasis.Closed(ulid.Time(ci.Min.Time()), ulid.Time(ci.Max.Time()))
+	var ranges []idRange
+	for _, ti := range tis {
+		if ri, ok := tiBasis.Intersect(cti, ti); ok {
+			ranges = append(ranges, toRange(ri))
+		}
+	}
+	return ranges
+}
+
+func toRange(ti intervals.Interval[time.Time]) idRange {
+	if ti.IsClosed() {
+		return idRange{start: minULIDForTime(ti.L), end: maxULIDForTime(ti.R)}
+	} else if ti.IsOpenL() {
+		return idRange{start: minULIDForTime(ti.L.Add(time.Millisecond)), end: maxULIDForTime(ti.R)}
+	} else if ti.IsOpenR() {
+		return idRange{start: minULIDForTime(ti.L), end: maxULIDForTime(ti.R.Add(-time.Millisecond))}
+	} else { // open
+		return idRange{start: minULIDForTime(ti.L.Add(time.Millisecond)), end: maxULIDForTime(ti.R.Add(-time.Millisecond))}
+	}
+}
+
+func minULIDForTime(t time.Time) ulid.ULID {
+	var id ulid.ULID
+	_ = id.SetTime(uint64(t.UnixMilli()))
+	return id
+}
+
+func maxULIDForTime(t time.Time) ulid.ULID {
+	maxBytes := make([]byte, 10)
+	for i := 0; i < len(maxBytes); i++ {
+		maxBytes[i] = 0xff
+	}
+	var id ulid.ULID
+	_ = id.SetTime(uint64(t.UnixMilli()))
+	_ = id.SetEntropy(maxBytes)
+	return id
+}
+
+func considerSIDAndDesc(irs []idRange, sid ulid.ULID, desc bool) []idRange {
+	if len(irs) == 0 {
+		return []idRange{{start: sid}}
+	}
+	if sid.Compare(ulidutils.ZeroULID) == 0 {
+		if desc {
+			return reverseRanges(irs)
+		}
+		return irs
+	}
+	if desc {
+		irs = reverseRanges(irs)
+		if sid.Compare(irs[0].start) >= 0 {
+			return irs
+		}
+		if sid.Compare(irs[len(irs)-1].end) < 0 {
+			return nil
+		}
+		for i, r := range irs {
+			if r.end.Compare(sid) <= 0 {
+				if r.start.Compare(sid) > 0 {
+					irs[i].start = sid
+				}
+				irs = irs[i:]
+				break
+			}
+		}
+		return irs
+	}
+	if sid.Compare(irs[0].start) <= 0 {
+		return irs
+	}
+	if sid.Compare(irs[len(irs)-1].end) > 0 {
+		return nil
+	}
+	for i, r := range irs {
+		if r.end.Compare(sid) >= 0 {
+			if r.start.Compare(sid) < 0 {
+				irs[i].start = sid
+			}
+			irs = irs[i:]
+			break
+		}
+	}
+	return irs
+}
+
+func reverseRanges(irs []idRange) []idRange {
+	if len(irs) == 0 {
+		return irs
+	}
+	l := 0
+	r := len(irs) - 1
+	for l < r {
+		irs[l].start, irs[l].end = irs[l].end, irs[l].start
+		irs[r].start, irs[r].end = irs[r].end, irs[r].start
+		irs[l], irs[r] = irs[r], irs[l]
+		l++
+		r--
+	}
+	if len(irs)&1 != 0 {
+		irs[l].start, irs[l].end = irs[l].end, irs[l].start
+	}
+	return irs
 }

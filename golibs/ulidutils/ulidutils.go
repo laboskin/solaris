@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package ulidutils
 
 import (
@@ -18,6 +19,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
+)
+
+var (
+	ZeroULID   = ulid.ULID{}
+	MaxULID, _ = ulid.Parse("7ZZZZZZZZZZZZZZZZZZZZZZZZZ")
 )
 
 // New returns new ulid.ULID.
