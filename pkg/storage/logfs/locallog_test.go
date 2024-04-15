@@ -126,6 +126,31 @@ func TestAppendRecordsLimits(t *testing.T) {
 	assert.True(t, errors.Is(err, errors.ErrClosed))
 }
 
+func TestAppendRecordsExpand(t *testing.T) {
+	p, ll := setupTestDB(t)
+	defer p.Close()
+	defer ll.Shutdown()
+
+	// will split onto two chunks
+	recs := generateRecords(2, files.BlockSize)
+	res, err := ll.AppendRecords(context.Background(), &solaris.AppendRecordsRequest{Records: recs, LogID: "l1", ExpandIDs: true})
+	assert.Nil(t, err)
+	assert.Equal(t, int64(2), res.Added)
+	assert.Len(t, res.RecordIDs, 2)
+	assert.NotEmpty(t, res.RecordIDs[0])
+	assert.NotEmpty(t, res.RecordIDs[1])
+
+	recs = generateRecords(2, files.BlockSize)
+	res, err = ll.AppendRecords(context.Background(), &solaris.AppendRecordsRequest{Records: recs, LogID: "l1", ExpandIDs: false})
+	assert.Nil(t, err)
+	assert.Equal(t, int64(2), res.Added)
+	assert.Len(t, res.RecordIDs, 0)
+
+	ll.Shutdown()
+	_, err = ll.AppendRecords(context.Background(), &solaris.AppendRecordsRequest{Records: recs, LogID: "l1"})
+	assert.True(t, errors.Is(err, errors.ErrClosed))
+}
+
 func TestQueryRecords(t *testing.T) {
 	dir, err := os.MkdirTemp("", "TestQueryRecords")
 	assert.Nil(t, err)

@@ -18,6 +18,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"sort"
+	"sync"
+
 	"github.com/oklog/ulid/v2"
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/container/iterable"
@@ -25,8 +28,6 @@ import (
 	"github.com/solarisdb/solaris/golibs/files"
 	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/ulidutils"
-	"sort"
-	"sync"
 )
 
 type (
@@ -286,6 +287,7 @@ func (c *Chunk) AppendRecords(recs []*solaris.Record) (AppendRecordsResult, erro
 	var startID, lastID ulid.ULID
 	for i, r := range recs {
 		lastID = ulidutils.New()
+		recs[i].ID = lastID.String()
 		if i == 0 {
 			startID = lastID
 		}

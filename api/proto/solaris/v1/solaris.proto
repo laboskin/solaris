@@ -55,11 +55,16 @@ message AppendRecordsRequest {
   string logID = 1;
   // records the list of records to be added
   repeated Record records = 2;
+  // expandIDs if true - response will contain list of inserted message IDs
+  bool expandIDs = 3;
 }
 
 // AppendRecordsResult contains the number or records added to the log
 message AppendRecordsResult {
+  // added is number of records added to database. If this value is less than passed ID list
   int64 added = 1;
+  // list of inserted ids. Returned only if expandIDs of request set to true
+  repeated string recordIDs = 2;
 }
 
 // QueryLogsRequest allows to read multiple Log objects per one request

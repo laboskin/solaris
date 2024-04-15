@@ -168,7 +168,16 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 		gerr = nil // disregard the error, cause we could write something
 	}
 
-	return &solaris.AppendRecordsResult{Added: int64(added)}, gerr
+	response := &solaris.AppendRecordsResult{Added: int64(added)}
+	if request.ExpandIDs {
+		ids := make([]string, added)
+		for idx := 0; idx < added; idx++ {
+			ids[idx] = request.Records[idx].ID
+		}
+		response.RecordIDs = ids
+	}
+
+	return response, gerr
 }
 
 func (l *localLog) appendRecords(ctx context.Context, cID string, newFile bool, recs []*solaris.Record) (chunkfs.AppendRecordsResult, error) {
