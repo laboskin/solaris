@@ -11,6 +11,8 @@ services:
     ports:
       - 50051:50051
       - 8080:8080
+    volumes:
+      - fs:/app/slogs
     healthcheck:
       test: [ "CMD", "/bin/grpc_health_probe", "-addr=:50051" ]
       interval: 10s
@@ -34,5 +36,7 @@ services:
       retries: 3
 
 volumes:
+  fs:
+    driver: local
   db:
     driver: local

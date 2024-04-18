@@ -206,8 +206,8 @@ func (b Basis[T]) Union(i1, i2 Interval[T]) (Interval[T], bool) {
 }
 
 // After returns true if the L border of the i1 interval
-// is lesser than the R border of the i2 interval.
-// NOTE: The `(L=1, R=3)` and `(L=2, R=4)` intervals are
+// is greater than the R border of the i2 interval.
+// NOTE: The `(L=2, R=4)` and `(L=1, R=3)` intervals are
 // considered to have an intersection (see Intersection description)
 // and the `(L=2, R=4).After.((L=1, R=3))` call returns false.
 func (b Basis[T]) After(i1, i2 Interval[T]) bool {

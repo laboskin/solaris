@@ -50,11 +50,11 @@ func (r *Rest) RegisterEPs(g *gin.Engine) error {
 
 func (r *Rest) CreateLog(c *gin.Context) {
 	var rReq restapi.CreateLogRequest
-	if r.errorRespnse(c, BindAppJson(c, &rReq), "") {
+	if r.errorResponse(c, BindAppJson(c, &rReq), "") {
 		return
 	}
 	sLog, err := r.svc.CreateLog(c, &solaris.Log{Tags: rReq.Tags})
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
 	c.JSON(http.StatusCreated, logToRest(sLog))
@@ -62,11 +62,11 @@ func (r *Rest) CreateLog(c *gin.Context) {
 
 func (r *Rest) UpdateLog(c *gin.Context, logId restapi.LogId) {
 	var rReq restapi.UpdateLogRequest
-	if r.errorRespnse(c, BindAppJson(c, &rReq), "") {
+	if r.errorResponse(c, BindAppJson(c, &rReq), "") {
 		return
 	}
 	sLog, err := r.svc.UpdateLog(c, &solaris.Log{ID: logId, Tags: rReq.Tags})
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
 	c.JSON(http.StatusOK, logToRest(sLog))
@@ -74,11 +74,11 @@ func (r *Rest) UpdateLog(c *gin.Context, logId restapi.LogId) {
 
 func (r *Rest) DeleteLogs(c *gin.Context) {
 	var rReq restapi.DeleteLogsRequest
-	if r.errorRespnse(c, BindAppJson(c, &rReq), "") {
+	if r.errorResponse(c, BindAppJson(c, &rReq), "") {
 		return
 	}
 	sRes, err := r.svc.DeleteLogs(c, &solaris.DeleteLogsRequest{Condition: rReq.FilterCondition})
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
 	c.JSON(http.StatusOK, restapi.DeleteLogsResponse{Deleted: len(sRes.DeletedIDs)})
@@ -91,7 +91,7 @@ func (r *Rest) QueryLogs(c *gin.Context, params restapi.QueryLogsParams) {
 	sReq.PageID = cast.String(params.FromPageId, "")
 
 	sRes, err := r.svc.QueryLogs(c, sReq)
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
 	rRes := restapi.QueryLogsResult{Items: logsToRest(sRes.Logs), Total: int(sRes.Total)}
@@ -103,14 +103,14 @@ func (r *Rest) QueryLogs(c *gin.Context, params restapi.QueryLogsParams) {
 
 func (r *Rest) CreateRecords(c *gin.Context, logId restapi.LogId) {
 	var rReq restapi.CreateRecordsRequest
-	if r.errorRespnse(c, BindAppJson(c, &rReq), "") {
+	if r.errorResponse(c, BindAppJson(c, &rReq), "") {
 		return
 	}
 	sReq := new(solaris.AppendRecordsRequest)
 	sReq.LogID = logId
 	sReq.Records = createRecsToSvc(rReq.Records)
 	sRes, err := r.svc.AppendRecords(c, sReq)
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
 	c.JSON(http.StatusCreated, restapi.CreateRecordsResponse{Added: int(sRes.Added)})
@@ -126,16 +126,14 @@ func (r *Rest) QueryRecords(c *gin.Context, params restapi.QueryRecordsParams) {
 	sReq.Limit = int64(cast.Int(params.Limit, 0))
 
 	sResQ, err := r.svc.QueryRecords(c, sReq)
-	if r.errorRespnse(c, err, "") {
+	if r.errorResponse(c, err, "") {
 		return
 	}
-	// TODO: uncomment after svc.CountRecords is implemented
-	//sResC, err := r.svc.CountRecords(c, sReq)
-	//if r.errorRespnse(c, err, "") {
-	//	return
-	//}
-	//rRes := restapi.QueryRecordsResult{Items: recsToRest(sResQ.Records), Total: int(sResC.Total)}
-	rRes := restapi.QueryRecordsResult{Items: recsToRest(sResQ.Records), Total: len(sResQ.Records)}
+	sResC, err := r.svc.CountRecords(c, sReq)
+	if r.errorResponse(c, err, "") {
+		return
+	}
+	rRes := restapi.QueryRecordsResult{Items: recsToRest(sResQ.Records), Total: int(sResC.Count)}
 	if len(sResQ.NextPageID) > 0 {
 		rRes.NextPageId = cast.Ptr(sResQ.NextPageID)
 	}
@@ -146,7 +144,7 @@ func (r *Rest) Ping(c *gin.Context) {
 	c.String(http.StatusOK, "pong")
 }
 
-func (r *Rest) errorRespnse(c *gin.Context, err error, msg string) bool {
+func (r *Rest) errorResponse(c *gin.Context, err error, msg string) bool {
 	if err == nil {
 		return false
 	}

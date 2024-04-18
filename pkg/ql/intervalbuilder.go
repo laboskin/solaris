@@ -46,6 +46,7 @@ func NewParamIntervalBuilder[T, K any](basis intervals.Basis[T], dialect Dialect
 }
 
 // Build returns a list of intervals built from the AST expression.
+// Returned intervals are sorted by the L border.
 func (ib *ParamIntervalBuilder[T, K]) Build(expr *Expression) ([]intervals.Interval[T], error) {
 	var res []intervals.Interval[T]
 	for _, or := range expr.Or {
@@ -57,8 +58,7 @@ func (ib *ParamIntervalBuilder[T, K]) Build(expr *Expression) ([]intervals.Inter
 			res = append(res, tt...)
 		}
 	}
-	res = ib.union(res)
-	return res, nil
+	return ib.union(res), nil
 }
 
 func (ib *ParamIntervalBuilder[T, K]) buildOR(or *OrCondition) ([]intervals.Interval[T], error) {
@@ -105,9 +105,6 @@ func (ib *ParamIntervalBuilder[T, K]) buildXCond(and *XCondition) ([]intervals.I
 func (ib *ParamIntervalBuilder[T, K]) buildCond(cond *Condition) ([]intervals.Interval[T], error) {
 	// param1
 	p1 := cond.FirstParam
-	if p1.Name(false) != ib.param { // skip not the param we look for
-		return nil, nil
-	}
 	dp1, ok := ib.dialect[p1.ID()]
 	if !ok {
 		return nil, fmt.Errorf("the parameter %s must be known: %w", p1.Name(false), errors.ErrInvalid)
@@ -118,14 +115,14 @@ func (ib *ParamIntervalBuilder[T, K]) buildCond(cond *Condition) ([]intervals.In
 	if dp1.Flags&PfNop != 0 {
 		return nil, fmt.Errorf("the parameter %s must allow operation (%s): %w", p1.Name(false), cond.Op, errors.ErrInvalid)
 	}
+	if p1.Name(false) != ib.param { // skip not the param we look for
+		return nil, nil
+	}
 
 	// param2
 	p2 := cond.SecondParam
 	if p2 == nil {
 		return nil, fmt.Errorf("the second parameter must be specified for the parameter %s and the operation %q: %w", p1.Name(false), cond.Op, errors.ErrInvalid)
-	}
-	if p2.Const == nil { // skip not a constant param
-		return nil, nil
 	}
 	dp2, ok := ib.dialect[p2.ID()]
 	if !ok {
@@ -136,6 +133,9 @@ func (ib *ParamIntervalBuilder[T, K]) buildCond(cond *Condition) ([]intervals.In
 	}
 	if dp2.Flags&PfNop != 0 {
 		return nil, fmt.Errorf("the second parameter %s must allow operation (%s): %w", p2.Name(false), cond.Op, errors.ErrInvalid)
+	}
+	if p2.Const == nil { // skip not a constant param
+		return nil, nil
 	}
 
 	// operation

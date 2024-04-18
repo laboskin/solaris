@@ -18,10 +18,12 @@ import (
 	"context"
 	rand2 "crypto/rand"
 	"fmt"
+	"github.com/oklog/ulid/v2"
 	"math/rand"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/solarisdb/solaris/api/gen/solaris/v1"
 	"github.com/solarisdb/solaris/golibs/container"
@@ -261,6 +263,68 @@ func TestCountRecords_SingleChunk(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(5), total)
 	assert.Equal(t, uint64(3), count)
+}
+
+func TestQueryCountRecordsWithCondition(t *testing.T) {
+	p, ll := setupTestDB(t)
+	defer p.Close()
+	defer ll.Shutdown()
+
+	var recs []*solaris.Record
+	for i := 0; i < 10; i++ {
+		recs = append(recs, generateRecords(1, 100)...)
+		res, err := ll.AppendRecords(context.Background(), &solaris.AppendRecordsRequest{Records: recs[len(recs)-1:], LogID: "l1"})
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), res.Added)
+		time.Sleep(time.Millisecond) // ULIDs have time in millis
+	}
+
+	startIDAsc := recs[3].ID
+	startIDDesc := recs[6].ID
+
+	geID, _ := ulid.Parse(recs[2].ID)
+	leID, _ := ulid.Parse(recs[7].ID)
+	exID, _ := ulid.Parse(recs[5].ID)
+
+	geTime := ulid.Time(geID.Time())
+	leTime := ulid.Time(leID.Time())
+	exTime := ulid.Time(exID.Time())
+
+	cond := fmt.Sprintf("ctime >= '%s' and ctime <= '%s' and ctime != '%s'",
+		geTime.Format(time.RFC3339Nano), leTime.Format(time.RFC3339Nano), exTime.Format(time.RFC3339Nano))
+
+	// query
+	records, more, err := ll.QueryRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDAsc, Condition: cond, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, records, 4)
+	require.False(t, more)
+
+	records, more, err = ll.QueryRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDDesc, Condition: cond, Limit: 10, Descending: true})
+	require.NoError(t, err)
+	require.Len(t, records, 4)
+	require.False(t, more)
+
+	// query limit
+	records, more, err = ll.QueryRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDAsc, Condition: cond, Limit: 4})
+	require.NoError(t, err)
+	require.Len(t, records, 4)
+	require.True(t, more)
+
+	records, more, err = ll.QueryRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDDesc, Condition: cond, Limit: 4, Descending: true})
+	require.NoError(t, err)
+	require.Len(t, records, 4)
+	require.True(t, more)
+
+	// count
+	total, count, err := ll.CountRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDAsc, Condition: cond})
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(4), count)
+	assert.Equal(t, uint64(10), total)
+
+	total, count, err = ll.CountRecords(context.Background(), storage.QueryRecordsRequest{LogID: "l1", StartID: startIDDesc, Condition: cond, Descending: true})
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(4), count)
+	assert.Equal(t, uint64(10), total)
 }
 
 func TestCountRecords_ManyChunks(t *testing.T) {

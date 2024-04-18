@@ -67,6 +67,7 @@ var dateTimeParser = datetime.NewParser([]string{
 	"YYYY/M/DD",
 
 	// yyyy-mm-ddThh
+	"YYYY-MM-DDTHH:mm:ss.SSSZZZZZ",
 	"YYYY-MM-DDTHH:mm:ss.SSSZZZZ",
 	"YYYY-MM-DDTHH:mm:ss.SSSZ",
 	"YYYY-MM-DDTHH:mm:ssZZZZZ",
