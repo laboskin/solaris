@@ -156,6 +156,7 @@ func (l *localLog) AppendRecords(ctx context.Context, request *solaris.AppendRec
 			cis = append(cis, ci)
 			recs = recs[arr.Written:]
 			added += arr.Written
+			ci.ID = ""
 		} else if ci.RecordsCount == 0 {
 			// the chunk was just created and its capacity is not enough to write at least one record!
 			gerr = fmt.Errorf("it seems the maximum chunk size is less than the record size payload=%d: %w", len(recs[0].Payload), errors.ErrInvalid)
