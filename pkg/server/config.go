@@ -17,9 +17,11 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/solarisdb/solaris/golibs/cast"
 	"github.com/solarisdb/solaris/golibs/config"
 	"github.com/solarisdb/solaris/golibs/logging"
 	"github.com/solarisdb/solaris/golibs/transport"
+	"github.com/solarisdb/solaris/pkg/db"
 )
 
 type (
@@ -30,44 +32,14 @@ type (
 		// HttpPort defines the port for listening incoming HTTP connections
 		HttpPort int
 		// DB specifies DBConn for storing the logs and chunks metadata
-		DB *DBConn
+		DB *db.DBConn
 		// LocalDBFilePath specifies where the logs data is stored
 		LocalDBFilePath string
 		// MaxOpenedLogFiles allows to control number of files opened at a time to work with the solaris data
 		// Increasing the number allows to increase the system performance for accessing to random group of logs
 		MaxOpenedLogFiles int
 	}
-
-	// DBConn represents database connection parameters
-	DBConn struct {
-		// Driver is the db driver (e.g. postgres)
-		Driver string
-		// Host is the host address where the db reside
-		Host string
-		// Port is the port on which the db is listening for connections
-		Port string
-		// Username is the username for authc/z against the db
-		Username string
-		// Password is the password for authc/z against the db
-		Password string
-		// DBName is the name of the db to connect to
-		DBName string
-		// SSLMode is the SSL mode to use
-		SSLMode string
-	}
 )
-
-// SourceName returns the DSN for the connection
-func (d *DBConn) SourceName() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		d.Host, d.Port, d.Username, d.Password, d.DBName, d.SSLMode)
-}
-
-// URL returns the URL for the connection
-func (d *DBConn) URL() string {
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s",
-		d.Driver, d.Username, d.Password, d.Host, d.Port, d.DBName, d.SSLMode)
-}
 
 // getDefaultConfig returns the default server config
 func getDefaultConfig() *Config {
@@ -76,14 +48,17 @@ func getDefaultConfig() *Config {
 		HttpPort:          8080,
 		LocalDBFilePath:   "slogs",
 		MaxOpenedLogFiles: 100,
-		DB: &DBConn{
-			Driver:   "postgres",
-			Host:     "localhost",
-			Port:     "5432",
-			Username: "postgres",
-			Password: "postgres",
-			DBName:   "solaris",
-			SSLMode:  "disable",
+		DB: &db.DBConn{
+			Driver:             "postgres",
+			Host:               "localhost",
+			Port:               "5432",
+			Username:           "postgres",
+			Password:           "postgres",
+			DBName:             "solaris",
+			SSLMode:            "disable",
+			MaxConnections:     cast.Ptr(64),
+			MaxIdleConnections: cast.Ptr(64),
+			MaxConnIdleTimeSec: cast.Ptr(30),
 		},
 	}
 }

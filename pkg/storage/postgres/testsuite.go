@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/jmoiron/sqlx"
+	"github.com/solarisdb/solaris/pkg/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"time"
@@ -68,7 +69,7 @@ func (ts *pgTestSuite) BeforeTest(suiteName, testName string) {
 	assert.Nil(ts.T(), ts.dropCreatePgDb(ctx))
 
 	var err error
-	ts.db, err = GetDb(ctx, dbCfg.DataSourceFull())
+	ts.db, err = GetDb(ctx, toDbConn(dbCfg))
 	assert.Nil(ts.T(), err)
 	assert.Nil(ts.T(), ts.db.Init(ctx))
 }
@@ -96,4 +97,16 @@ func (ts *pgTestSuite) dropCreatePgDb(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func toDbConn(cfg DbConfig) *db.DBConn {
+	return &db.DBConn{
+		Driver:   "postgres",
+		DBName:   cfg.DbName,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Username: cfg.User,
+		Password: cfg.Password,
+		SSLMode:  cfg.SslMode,
+	}
 }

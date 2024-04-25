@@ -67,7 +67,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	replicator := chunkfs.NewReplicator(provider.GetFileNameByID)
 
 	// Db
-	db := postgres.MustGetDb(ctx, cfg.DB.SourceName())
+	db := postgres.MustGetDb(ctx, cfg.DB)
 
 	inj := linker.New()
 	inj.Register(linker.Component{Name: "", Value: cache.NewCachedStorage(postgres.NewStorage(db))})
