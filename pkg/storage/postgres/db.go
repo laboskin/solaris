@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/solarisdb/solaris/golibs/logging"
+	"github.com/solarisdb/solaris/pkg/db"
+	"time"
 )
 
 type (
@@ -16,8 +18,8 @@ type (
 )
 
 // MustGetDb does the same as GetDb but panics in case of an error
-func MustGetDb(ctx context.Context, dsName string) *Db {
-	db, err := GetDb(ctx, dsName)
+func MustGetDb(ctx context.Context, dbConn *db.DBConn) *Db {
+	db, err := GetDb(ctx, dbConn)
 	if err != nil {
 		panic(err)
 	}
@@ -25,10 +27,19 @@ func MustGetDb(ctx context.Context, dsName string) *Db {
 }
 
 // GetDb returns the Db object built for the given configuration
-func GetDb(ctx context.Context, dsName string) (*Db, error) {
-	db, err := sqlx.ConnectContext(ctx, "postgres", dsName)
+func GetDb(ctx context.Context, dbConn *db.DBConn) (*Db, error) {
+	db, err := sqlx.ConnectContext(ctx, "postgres", dbConn.SourceName())
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to the database: %w", err)
+	}
+	if dbConn.MaxConnections != nil {
+		db.SetMaxOpenConns(*dbConn.MaxConnections)
+	}
+	if dbConn.MaxIdleConnections != nil {
+		db.SetMaxIdleConns(*dbConn.MaxIdleConnections)
+	}
+	if dbConn.MaxConnIdleTimeSec != nil {
+		db.SetConnMaxIdleTime(time.Duration(*dbConn.MaxConnIdleTimeSec) * time.Second)
 	}
 	if err = migrateUp(ctx, db.DB); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
