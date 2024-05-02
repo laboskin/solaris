@@ -31,6 +31,9 @@ Solaris is a cloud service primarily built for storing a large amount of data in
 
 If scale or data size is not a factor, but simplicity and speed are still required, Solaris can be run in a stand-alone configuration. In this configuration, there are no dependencies on any external services. The stand-alone Solaris instance can be run in a Docker container, as a Kubernetes instance, or even on a local machine to serve as the streaming database for a small amount of data (that may fit into the local filesystem) or as part of the development environment. In this case, Solaris is very lightweight, fast, and easy to run (as it consists of a single executable).
 
+### Documentation
+See https://solarisdb.github.io/docs
+
 ## License
 This project is licensed under the Apache Version 2.0 License - see the [LICENSE](LICENSE) file for details
 
